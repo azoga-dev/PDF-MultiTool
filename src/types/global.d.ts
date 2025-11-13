@@ -27,6 +27,8 @@ declare global {
       countFilesInFolder: (folderPath: string) => Promise<number>;
       openFolder: (folderPath: string) => Promise<boolean>;
       compressPDFs: (options: { inputFolder: string; outputFolder: string; quality?: number }) => Promise<{ processed: number; total: number; log: string[]; used?: string }>;
+      compressFiles: (options: { files: string[]; outputFolder: string; quality?: number }) => Promise<{ processed: number; total: number; log: string[]; used?: string }>;
+      pathIsDirectory: (p: string) => Promise<boolean>;
       onCompressProgress: (cb: (event: any, payload: { index: number; total: number; name: string; inSize?: number; outSize?: number; ok: boolean; error?: string | null; notes?: string | null }) => void) => () => void;
       onCompressComplete: (cb: (event: any, payload: { processed: number; total: number; log: string[] }) => void) => () => void;
       cancelCompress: () => Promise<boolean>;

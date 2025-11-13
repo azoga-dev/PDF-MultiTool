@@ -313,6 +313,122 @@ function createLogWindow() {
   });
 }
 
+// IPC: проверить, является ли путь директорией
+ipcMain.handle('path-is-directory', async (_e, p: string) => {
+  try {
+    const st = await fsp.stat(p);
+    return st.isDirectory();
+  } catch {
+    return false;
+  }
+});
+
+// IPC: сжатие списка файлов (drag&drop)
+ipcMain.handle('compress-files', async (_e, { files, outputFolder, quality = 30 }: { files: string[]; outputFolder: string; quality?: number }) => {
+  const result: { processed: number; total: number; log: string[]; used?: string; files?: any[] } = { processed: 0, total: 0, log: [], used: 'none', files: [] };
+  try {
+    if (!files || !Array.isArray(files) || files.length === 0) throw new Error('Нет файлов для сжатия');
+    if (!outputFolder) throw new Error('Не указана папка вывода');
+    await fs.ensureDir(outputFolder);
+
+    const pdfs: string[] = [];
+    for (const f of files) {
+      try {
+        const st = await fsp.stat(f);
+        if (st.isFile() && f.toLowerCase().endsWith('.pdf')) pdfs.push(f);
+      } catch { /* skip */ }
+    }
+    result.total = pdfs.length;
+    result.log.push(`Получено ${pdfs.length} PDF для сжатия (drag&drop)`);
+
+    async function findGhostscript(): Promise<string | null> {
+      const candidates = ['gs', 'gswin64c', 'gswin32c'];
+      for (const c of candidates) {
+        try { await execFileAsync(c, ['--version']); return c; } catch { /* ignore */ }
+      }
+      return null;
+    }
+    function qualityToPdfSettings(q: number) {
+      if (q <= 12) return '/screen';
+      if (q <= 25) return '/ebook';
+      if (q <= 40) return '/printer';
+      return '/prepress';
+    }
+
+    const gsCmd = await findGhostscript();
+    if (gsCmd) result.used = `ghostscript (${gsCmd})`;
+    else result.used = 'pdf-lib(fallback)';
+
+    let index = 0;
+    for (const fullPath of pdfs) {
+      index++;
+      const fname = path.basename(fullPath);
+      const outP = path.join(outputFolder, fname);
+      const fileInfo: any = { name: fname, ok: false };
+      const tmpIn = path.join(os.tmpdir(), `in-${randomUUID()}.pdf`);
+      const tmpOut = path.join(os.tmpdir(), `out-${randomUUID()}.pdf`);
+      try {
+        const statIn = await fsp.stat(fullPath).catch(() => ({ size: undefined }));
+        fileInfo.inSize = statIn.size;
+        if (gsCmd) {
+          await fsp.copyFile(fullPath, tmpIn);
+          const pdfSetting = qualityToPdfSettings(quality);
+          const args = ['-sDEVICE=pdfwrite','-dCompatibilityLevel=1.4', `-dPDFSETTINGS=${pdfSetting}`, '-dNOPAUSE','-dBATCH', `-sOutputFile=${tmpOut}`, tmpIn];
+          try {
+            await execFileAsync(gsCmd, args);
+            if (!(await fs.pathExists(tmpOut))) throw new Error('Ghostscript не создал выходной файл');
+            await fs.copy(tmpOut, outP, { overwrite: true });
+            fileInfo.ok = true;
+            fileInfo.notes = `GS:${pdfSetting}`;
+            result.log.push(`GS: ${fname} -> ${outP} (${pdfSetting})`);
+          } catch (gsErr) {
+            fileInfo.ok = false;
+            fileInfo.error = (gsErr as Error).message;
+            result.log.push(`Ошибка GS ${fname}: ${(gsErr as Error).message}`);
+          } finally { try { await fs.remove(tmpIn); } catch {} try { await fs.remove(tmpOut); } catch {} }
+        } else {
+          try {
+            const inputBytes = await fsp.readFile(fullPath);
+            const pdfDoc = await PDFDocument.load(inputBytes);
+            const outBytes = await pdfDoc.save();
+            await fsp.writeFile(outP, outBytes);
+            fileInfo.ok = true;
+            fileInfo.notes = 'fallback';
+            result.log.push(`FB: ${fname} -> ${outP}`);
+          } catch (fbErr) {
+            fileInfo.ok = false;
+            fileInfo.error = (fbErr as Error).message;
+            result.log.push(`Ошибка fallback ${fname}: ${(fbErr as Error).message}`);
+          }
+        }
+
+        const statOut = await fsp.stat(outP).catch(() => ({ size: undefined as any }));
+        fileInfo.outSize = statOut.size;
+        result.files?.push(fileInfo);
+        result.processed++;
+
+        mainWindow?.webContents.send('compress-progress', {
+          index, total: result.total, name: fname, inSize: fileInfo.inSize, outSize: fileInfo.outSize, ok: fileInfo.ok, error: fileInfo.error || null, notes: fileInfo.notes || null
+        });
+      } catch (err) {
+        fileInfo.ok = false;
+        fileInfo.error = (err as Error).message;
+        result.log.push(`Ошибка обработки ${fname}: ${(err as Error).message}`);
+        mainWindow?.webContents.send('compress-progress', { index, total: result.total, name: fname, ok: false, error: fileInfo.error || null });
+      }
+    }
+
+    mainWindow?.webContents.send('compress-complete', { processed: result.processed, total: result.total, log: result.log });
+    result.log.unshift(`Сжатие завершено. Engine: ${result.used}`);
+    return result;
+  } catch (err) {
+    const em = `Ошибка compress-files: ${(err as Error).message}`;
+    result.log.push(em);
+    mainWindow?.webContents.send('compress-complete', { processed: result.processed, total: result.total, log: result.log });
+    return result;
+  }
+});
+
 /* IPC: открыть окно логов */
 ipcMain.handle('open-log-window', async () => {
   createLogWindow();

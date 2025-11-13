@@ -17,6 +17,7 @@ let lastSelectedCompressOutputFolder: string | null = null;
 let lastReportPath: string | null = null;
 let isCompressRunning: boolean = false;
 let cancelCompressRequested: boolean = false;
+let droppedFiles: string[] = [];
 
 /* DOM элементы */
 const navMode1 = document.getElementById('nav-mode1') as HTMLButtonElement;
@@ -147,6 +148,55 @@ const btnOpenReport = document.getElementById('btn-open-report') as HTMLButtonEl
   });
 })();
 
+(function setupCompressDrop() {
+  const dropEl = document.getElementById('compress-drop-hint') as HTMLDivElement | null;
+  if (!dropEl) return;
+
+  const onDragOver = (ev: DragEvent) => { ev.preventDefault(); dropEl.classList.add('drop-over'); };
+  const onDragLeave = (ev: DragEvent) => { ev.preventDefault(); dropEl.classList.remove('drop-over'); };
+
+  const onDrop = async (ev: DragEvent) => {
+    ev.preventDefault();
+    dropEl.classList.remove('drop-over');
+    const filesList = Array.from(ev.dataTransfer?.files || []);
+    if (filesList.length === 0) return;
+    const paths = filesList.map(f => (f as any).path).filter(Boolean) as string[];
+    if (paths.length === 0) return;
+
+    // Если одна папка — назначаем входную папку
+    if (paths.length === 1) {
+      try {
+        const isDir = await window.electronAPI.pathIsDirectory(paths[0]);
+        if (isDir) {
+          lastSelectedCompress = paths[0];
+          if (labelCompress) labelCompress.value = paths[0];
+          droppedFiles = [];
+          const countEl = document.getElementById('compress-drop-count') as HTMLSpanElement | null;
+          if (countEl) { countEl.style.display = 'none'; countEl.textContent = '0'; }
+          updateCompressReady();
+          try { await saveSettings(); } catch {}
+          showPopup('Папка назначена как вход', 3000);
+          return;
+        }
+      } catch { /* ignore */ }
+    }
+
+    const pdfs = paths.filter(p => p.toLowerCase().endsWith('.pdf'));
+    if (pdfs.length === 0) { showPopup('Перетащите только PDF файлы', 4000); return; }
+
+    droppedFiles = pdfs;
+    const countEl = document.getElementById('compress-drop-count') as HTMLSpanElement | null;
+    if (countEl) { countEl.style.display = ''; countEl.textContent = String(droppedFiles.length); }
+    if (labelCompress) labelCompress.value = 'Перетащено файлов: ' + droppedFiles.length;
+    updateCompressReady();
+    showPopup(`Принято ${droppedFiles.length} PDF`, 3000);
+  };
+
+  dropEl.addEventListener('dragover', onDragOver);
+  dropEl.addEventListener('dragleave', onDragLeave);
+  dropEl.addEventListener('drop', onDrop);
+})();
+
 function setCompressStatus(state: 'idle' | 'running' | 'cancel' | 'done', text: string) {
   const el = document.getElementById('compress-status-label') as HTMLSpanElement | null;
   if (!el) return;
@@ -188,7 +238,7 @@ const log = (message: string, level: 'info' | 'success' | 'warning' | 'error' = 
 
 // Aктивация кнопки запуска сжатия: включаем, когда выбраны входная и выходная папки
 function updateCompressReady() {
-  const hasInput = labelCompress && labelCompress.value && labelCompress.value !== 'Не выбрана';
+  const hasInput = (labelCompress && labelCompress.value && labelCompress.value !== 'Не выбрана') || (droppedFiles && droppedFiles.length > 0);
   const hasOutput = compressOutputFolder && compressOutputFolder !== '';
   if (btnCompressRun) btnCompressRun.disabled = !(!!hasInput && !!hasOutput);
 }
@@ -241,30 +291,42 @@ function updateCompressReady() {
 
   /* Запуск сжатия */
   if (btnCompressRun) btnCompressRun.addEventListener('click', async () => {
-    if (!labelCompress || !labelCompress.value || !compressOutputFolder) {
-      showPopup('Выберите входную и выходную папки для сжатия', 5000);
+    // вход — либо выбранная папка, либо droppedFiles
+    if ((!labelCompress || !labelCompress.value || labelCompress.value === 'Не выбрана') && (!droppedFiles || droppedFiles.length === 0)) {
+      showPopup('Выберите папку или перетащите файлы', 5000);
       return;
     }
+    if (!compressOutputFolder) {
+      showPopup('Выберите папку результата (выход)', 5000);
+      return;
+    }
+
     const quality = selectCompressQuality ? parseInt(selectCompressQuality.value, 10) : 30;
-    log(`Запущено сжатие: ${labelCompress.value} -> ${compressOutputFolder}, качество ${quality}%`, 'info');
+    log(`Запущено сжатие: ${labelCompress?.value || '(перетащенные файлы)'} -> ${compressOutputFolder}, качество ${quality}%`, 'info');
 
     isCompressRunning = true;
-    cancelCompressRequested = false;
-    // БЫЛО: compressStatusLabel.style.background = '#93c5fd'
-    // СТАЛО:
     setCompressStatus('running', 'Выполняется…');
-    const busyLabel = document.getElementById('busy-label');
-    if (busyLabel) busyLabel.textContent = 'Сжатие выполняется…';
-
     setBusy(true);
     try {
       clearCompressTable();
-      const res = await window.electronAPI.compressPDFs({ inputFolder: labelCompress.value, outputFolder: compressOutputFolder, quality });
-      if (res && Array.isArray(res.log)) res.log.forEach((m: string) => log(m, m.includes('Ошибка') ? 'error' : 'info'));
+      if (droppedFiles && droppedFiles.length > 0) {
+        const res = await window.electronAPI.compressFiles({ files: droppedFiles, outputFolder: compressOutputFolder!, quality });
+        if (res && Array.isArray(res.log)) res.log.forEach((m: string) => log(m, m.includes('Ошибка') ? 'error' : 'info'));
+      } else {
+        const res = await window.electronAPI.compressPDFs({ inputFolder: labelCompress!.value, outputFolder: compressOutputFolder!, quality });
+        if (res && Array.isArray(res.log)) res.log.forEach((m: string) => log(m, m.includes('Ошибка') ? 'error' : 'info'));
+      }
       updateStats();
     } catch (err) {
       log(`Ошибка при сжатии: ${(err as Error).message}`, 'error');
       showPopup('Ошибка при сжатии. Проверьте лог.', 8000);
+    } finally {
+      droppedFiles = [];
+      const countEl = document.getElementById('compress-drop-count') as HTMLSpanElement | null;
+      if (countEl) { countEl.style.display = 'none'; countEl.textContent = '0'; }
+      if (labelCompress && lastSelectedCompress) labelCompress.value = lastSelectedCompress;
+      isCompressRunning = false;
+      setBusy(false);
     }
   });
 
