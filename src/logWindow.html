@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Лог — PDFmanager</title>
+  <link href="./styles.css" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #111827;
+      --panel: #f9fafb;
+      --border: #e5e7eb;
+      --btn-bg: #3b82f6;
+      --btn-text: #fff;
+      --muted: #6b7280;
+    }
+    [data-theme="dark"] {
+      --bg: #0b1220;
+      --text: #e5e7eb;
+      --panel: #111827;
+      --border: #374151;
+      --btn-bg: #2563eb;
+      --btn-text: #fff;
+      --muted: #9ca3af;
+    }
+
+    html,body { height:100%; margin:0; font-family: Inter, system-ui, Arial; background:var(--bg); color:var(--text); }
+    .wrap { padding: 12px; height:100%; box-sizing:border-box; display:flex; flex-direction:column; gap:12px; }
+
+    /* Основной ряд контролов: все элементы на одной линии */
+    .controls {
+      display:flex;
+      align-items:center;       /* выровнять по центру по вертикали */
+      gap:12px;
+      width:100%;
+      flex-wrap:nowrap;         /* не переносить на новую строку, пока позволяет ширина */
+    }
+
+    .controls-left { display:flex; align-items:center; gap:8px; }
+    .controls-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+    .btn { padding:8px 12px; border-radius:8px; border:1px solid var(--border); cursor:pointer; background:var(--panel); color:var(--text); }
+    .btn.primary { background:var(--btn-bg); color:var(--btn-text); border:none; }
+    .btn:disabled { opacity: .6; cursor:not-allowed; }
+
+    .filters { display:flex; gap:10px; align-items:center; margin-left:8px; }
+    .filters label { font-size:13px; color:var(--muted); display:flex; gap:6px; align-items:center; }
+
+    .search { padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--panel); min-width:220px; max-width:420px; width:28ch; box-sizing:border-box; }
+
+    .log { flex:1; width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-family:monospace; font-size:13px; resize:vertical; overflow:auto; white-space:pre-wrap; }
+    .small { color:var(--muted); font-size:12px; }
+
+    /* Небольшая адаптивность: на узких экранах элементы начнут переноситься */
+    @media (max-width: 760px) {
+      .controls { flex-wrap:wrap; gap:8px; }
+      .controls-right { margin-left:0; width:100%; justify-content:flex-start; }
+      .search { width:100%; min-width:0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="controls">
+      <div class="controls-left">
+        <button id="btn-export" class="btn primary">Экспортировать лог</button>
+        <button id="btn-clear" class="btn">Очистить вид</button>
+
+        <div class="filters" role="group" aria-label="Фильтры по уровню">
+          <label><input type="checkbox" id="chk-info" checked> info</label>
+          <label><input type="checkbox" id="chk-warning" checked> warn</label>
+          <label><input type="checkbox" id="chk-error" checked> error</label>
+        </div>
+      </div>
+
+      <div class="controls-right">
+        <input id="search" class="search" placeholder="Фильтр по тексту" aria-label="Поиск по логам" />
+      </div>
+    </div>
+
+    <div id="log-area" class="log" aria-label="Лог приложения"></div>
+    <div class="small">Лог синхронизируется в реальном времени. Фильтр применяет отображение локально.</div>
+  </div>
+
+  <script>
+    // Локальная логика фильтрации/отображения в окне логов (без изменений по функционалу)
+    const logArea = document.getElementById('log-area');
+    const btnExport = document.getElementById('btn-export');
+    const btnClear = document.getElementById('btn-clear');
+    const chkInfo = document.getElementById('chk-info');
+    const chkWarning = document.getElementById('chk-warning');
+    const chkError = document.getElementById('chk-error');
+    const search = document.getElementById('search');
+
+    const lines = [];
+
+    function formatLineForDisplay(line) { return line; }
+
+    function applyFilterAndRender() {
+      const showInfo = chkInfo.checked;
+      const showWarn = chkWarning.checked;
+      const showErr = chkError.checked;
+      const q = (search.value || '').toLowerCase();
+      const filtered = lines.filter(l => {
+        const levelMatch = l.match(/\]\s*\[?([A-ZА-Яa-z]+)\]?/);
+        let level = levelMatch ? levelMatch[1].toLowerCase() : 'info';
+        if (level === 'warning') level = 'warn';
+        if (level === 'warn' && !showWarn) return false;
+        if (level === 'info' && !showInfo) return false;
+        if (level === 'error' && !showErr) return false;
+        if (q && !l.toLowerCase().includes(q)) return false;
+        return true;
+      });
+      logArea.innerText = filtered.map(formatLineForDisplay).join('\n');
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    function appendLine(line) {
+      lines.push(line);
+      const showInfo = chkInfo.checked;
+      const showWarn = chkWarning.checked;
+      const showErr = chkError.checked;
+      const q = (search.value || '').toLowerCase();
+      const levelMatch = line.match(/\]\s*\[?([A-ZА-Яa-z]+)\]?/);
+      let level = levelMatch ? levelMatch[1].toLowerCase() : 'info';
+      if (level === 'warning') level = 'warn';
+      const passesLevel = (level === 'info' && showInfo) || (level === 'warn' && showWarn) || (level === 'error' && showErr);
+      const passesQuery = !q || line.toLowerCase().includes(q);
+      if (passesLevel && passesQuery) {
+        const prev = logArea.innerText;
+        logArea.innerText = prev ? prev + '\n' + line : line;
+        logArea.scrollTop = logArea.scrollHeight;
+      }
+    }
+
+    window.electronAPI.onLogContent((_e, content) => {
+      lines.length = 0;
+      if (content) {
+        const arr = content.split(/\r?\n/).filter(Boolean);
+        arr.forEach(l => lines.push(l));
+      }
+      applyFilterAndRender();
+    });
+
+    window.electronAPI.onLogAppend((_e, line) => { lines.push(line); appendLine(line); });
+
+    window.electronAPI.onMergeComplete((_e, summary) => {
+      appendLine('\n=== Merge complete ===');
+      appendLine(JSON.stringify(summary, null, 2));
+      appendLine('======================\n');
+    });
+
+    // Синхронизация темы: main шлёт 'set-theme', применяем data-theme
+    window.electronAPI.onSetTheme((_e, isDark) => {
+      try {
+        document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+      } catch { /* ignore */ }
+    });
+
+    // UI handlers
+    chkInfo.addEventListener('change', applyFilterAndRender);
+    chkWarning.addEventListener('change', applyFilterAndRender);
+    chkError.addEventListener('change', applyFilterAndRender);
+    search.addEventListener('input', applyFilterAndRender);
+
+    btnExport.addEventListener('click', async () => {
+      btnExport.disabled = true;
+      try {
+        const res = await window.electronAPI.exportLog();
+        if (res && res.ok) alert('Лог сохранён: ' + res.path);
+        else alert('Ошибка при сохранении лога' + (res?.error ? (': ' + res.error) : ''));
+      } finally { btnExport.disabled = false; }
+    });
+
+    btnClear.addEventListener('click', () => { logArea.innerText = ''; });
+  </script>
+</body>
+</html>

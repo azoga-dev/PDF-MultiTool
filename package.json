@@ -1,0 +1,75 @@
+{
+  "name": "pdf-electron-app",
+  "productName": "PDFmanager",
+  "version": "1.0.0",
+  "description": "Application for working with PDF files",
+  "main": "./dist/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "tsc",
+    "build:tailwind": "npx tailwindcss -i ./src/input.css -o ./src/styles.css",
+    "package": "npm run build && npm run build:tailwind",
+    "make": "npm run package && npx electron-builder --win --x64",
+    "publish": "npm run package && npx electron-builder --win --x64 --publish=always",
+    "copy-assets": "node copy-assets.js",
+    "watch-assets": "nodemon --watch src/index.html --watch src/styles.css --exec \"npm run copy-assets\""
+  },
+  "keywords": [],
+  "author": "azoga99",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.19.24",
+    "autoprefixer": "^10.4.19",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "nodemon": "^3.1.10",
+    "postcss": "^8.4.39",
+    "shelljs": "^0.10.0",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "docx": "^8.4.0",
+    "electron-updater": "^6.6.2",
+    "exceljs": "^4.4.0",
+    "fs-extra": "^11.2.0",
+    "pandas-js": "^0.2.4",
+    "pdf-lib": "^1.17.1",
+    "uuid": "^13.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/azoga-dev/PDF-MultiTool.git"
+  },
+  "build": {
+    "appId": "com.azoga-dev.pdfmanager",
+    "productName": "PDFmanager",
+    "directories": {
+      "output": "dist-electron-builder"
+    },
+    "files": [
+      "dist/**/*",
+      "src/assets/**/*",
+      "src/styles.css",
+      "src/index.html",
+      "src/logWindow.html",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "azoga-dev",
+      "repo": "PDF-MultiTool"
+    }
+  }
+}

@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Мультитул</title>
+    <link href="./styles.css" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Базовые стили для светлой/темной темы */
+        :root {
+            --bg-color: #f9fafb; /* bg-gray-50 */
+            --text-color: #111827; /* gray-900 */
+            --sidebar-bg: #ffffff; /* white */
+            --sidebar-border: #e5e7eb; /* gray-200 */
+            --main-bg: #ffffff; /* white */
+            --folder-input-bg: #f9fafb; /* gray-50 */
+            --folder-input-border: #d1d5db; /* gray-300 */
+            --folder-input-text: #111827; /* gray-900 */
+            --status-section-bg: #f3f4f6; /* gray-100 */
+            --status-section-border: #d1d5db; /* gray-300 */
+            --progress-bar-bg: #e5e7eb; /* gray-200 */
+            --progress-bar-fill: #10b981; /* emerald-500 */
+            --log-bg: #f9fafb; /* gray-50 */
+            --log-border: #d1d5db; /* gray-300 */
+            --log-text: #111827; /* gray-900 */
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #111827; /* gray-900 */
+            --text-color: #e5e7eb; /* gray-200 */
+            --sidebar-bg: #1f2937; /* gray-800 */
+            --sidebar-border: #374151; /* gray-700 */
+            --main-bg: #111827; /* gray-900 */
+            --folder-input-bg: #374151; /* gray-700 */
+            --folder-input-border: #4b5563; /* gray-600 */
+            --folder-input-text: #e5e7eb; /* gray-200 */
+            --status-section-bg: #374151; /* gray-700 */
+            --status-section-border: #4b5563; /* gray-600 */
+            --progress-bar-bg: #374151; /* gray-700 */
+            --progress-bar-fill: #10b981; /* emerald-500 */
+            --log-bg: #111827; /* gray-900 */
+            --log-border: #4b5563; /* gray-600 */
+            --log-text: #e5e7eb; /* gray-200 */
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 200px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--sidebar-border);
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            box-shadow: inset -2px 0 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .sidebar-header {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--sidebar-border);
+            text-align: center;
+        }
+
+        .nav-button {
+            padding: 0.5rem 1rem;
+            margin: 0.25rem 0;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-align: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+            display: block;
+        }
+
+        .nav-button.active {
+            background-color: #dbeafe; /* blue-100 */
+            color: #2563eb; /* blue-600 */
+            border: 1px solid #bfdbfe; /* blue-200 */
+        }
+
+        .nav-button:not(.active) {
+            background-color: #f3f4f6; /* gray-100 */
+            color: #4b5563; /* gray-600 */
+            border: 1px solid #d1d5db; /* gray-300 */
+        }
+
+        [data-theme="dark"] .nav-button:not(.active) {
+            background-color: #374151; /* gray-700 */
+            color: #d1d5db; /* gray-300 */
+            border: 1px solid #4b5563; /* gray-600 */
+        }
+
+        [data-theme="dark"] .nav-button.active {
+            background-color: #1d4ed8; /* blue-700 */
+            color: #eff6ff; /* blue-50 */
+            border: 1px solid #3b82f6; /* blue-500 */
+        }
+
+        .nav-button:hover:not(.active) {
+            background-color: #e5e7eb; /* gray-200 */
+        }
+
+        [data-theme="dark"] .nav-button:hover:not(.active) {
+            background-color: #4b5563; /* gray-600 */
+        }
+
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 1.5rem;
+            background-color: var(--main-bg);
+        }
+
+        .content-header {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .folder-section {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            width: 100%;
+        }
+
+        .folder-group {
+            margin-bottom: 1.5rem;
+            padding: 0.75rem; /* <-- НОВОЕ: добавляем отступы внутри */
+            background-color: var(--status-section-bg);
+            border: 1px solid var(--status-section-border);
+            border-radius: 0.375rem;
+            width: 100%; /* <-- Оставляем, чтобы группа занимала всю ширину */
+        }
+
+        .folder-group:last-child {
+            margin-bottom: 0; /* <-- Убираем отступ у последней группы */
+        }
+
+        .folder-row {
+            display: flex;
+            flex-direction: column; /* <-- Лейбл и контейнер теперь в столбце */
+            align-items: flex-start; /* <-- Выравнивание по левому краю */
+            gap: 0.5rem; /* <-- Отступ между лейблом и контейнером */
+            margin-bottom: 1rem;
+            width: 100%;
+        }
+
+        /* Контейнер для инпута и кнопки */
+        .folder-input-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            /* width: 100%; */ /* <-- УБРАТЬ эту строку */
+            flex: 1; /* <-- НОВОЕ: позволяет контейнеру занять всё доступное пространство */
+        }
+
+        /* Лейбл над инпутом */
+        .folder-label {
+            font-weight: 500;
+            color: var(--text-color);
+            display: block;
+            margin-bottom: 0.25rem; /* <-- Небольшой отступ от лейбла к инпуту */
+        }
+
+        /* Инпут, который должен растягиваться */
+        .folder-input {
+            flex: 1; /* <-- Занимает всё доступное место */
+            min-width: 0; /* <-- Позволяет сжиматься */
+            max-width: 100%; /* <-- Не выходит за границы */
+            padding: 0.5rem;
+            background-color: var(--folder-input-bg);
+            border: 1px solid var(--folder-input-border);
+            border-radius: 0.375rem;
+            color: var(--folder-input-text);
+            font-size: 0.875rem;
+            box-sizing: border-box; /* <-- Учитывает padding в ширине */
+        }
+
+        /* Кнопка "Выбрать" */
+        .btn {
+            /* Убедитесь, что кнопка не сжимается */
+            flex-shrink: 0; /* <-- Ключевое свойство */
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: background-color 0.2s;
+        }
+
+        .btn-primary {
+            background-color: #f87171; /* red-400 */
+            color: white;
+            border: 1px solid #fca5a5; /* red-300 */
+        }
+
+        .btn-primary:hover {
+            background-color: #ef4444; /* red-500 */
+        }
+
+        .btn-secondary {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+            border: 1px solid #60a5fa; /* blue-400 */
+        }
+
+        .btn-secondary:hover {
+            background-color: #2563eb; /* blue-600 */
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            border: 1px solid var(--folder-input-border);
+            color: var(--text-color);
+        }
+
+        .btn-outline:hover {
+            background-color: var(--folder-input-bg);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.25rem;
+            margin-bottom: 0;
+            width: 100%;
+        }
+
+        .checkbox-input {
+            width: 1rem;
+            height: 1rem;
+            accent-color: #2563eb; /* blue-600 */
+        }
+
+        .checkbox-label {
+            color: var(--text-color);
+        }
+
+        .status-section {
+            margin: 1rem 0;
+            padding: 0.75rem;
+            background-color: var(--status-section-bg);
+            border-radius: 0.375rem;
+            border: 1px solid var(--status-section-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            width: 100%;
+        }
+
+        .status-info {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.875rem;
+            color: var(--text-color);
+        }
+
+        .status-ready {
+            color: #10b981; /* emerald-500 */
+            font-weight: 500;
+        }
+
+        .status-not-ready {
+            color: #ef4444; /* red-500 */
+            font-weight: 500;
+        }
+
+        .sidebar-footer {
+            margin-top: auto; /* Прижимает футер вниз */
+            padding: 1rem 0 0 0; /* Убрали padding-left/right, добавили top */
+            border-top: 1px solid var(--sidebar-border); /* gray-200 */
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Центрируем содержимое по горизонтали */
+        }
+
+                /* ... (предыдущие стили) ... */
+
+        .settings-button {
+            padding: 0.5rem 1rem;
+            margin: 0.25rem 0;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex; /* Используем inline-flex для правильного выравнивания */
+            align-items: center; /* Центрируем по вертикали */
+            gap: 0.5rem; /* Расстояние между иконкой и текстом */
+            transition: all 0.2s ease;
+            text-align: center;
+            justify-content: center;
+            
+            /* Используем переменные темы */
+            background-color: var(--settings-btn-bg, #f3f4f6); /* gray-100 по умолчанию */
+            color: var(--settings-btn-text, #4b5563); /* gray-600 по умолчанию */
+            border: 1px solid var(--settings-btn-border, #d1d5db); /* gray-300 по умолчанию */
+        }
+
+        .settings-button:hover {
+            background-color: var(--settings-btn-hover-bg, #e5e7eb); /* gray-200 по умолчанию */
+        }
+
+        .settings-button:active {
+            transform: scale(0.98);
+        }
+
+        /* --- Темные стили --- */
+        [data-theme="dark"] .settings-button {
+            background-color: var(--settings-btn-bg-dark, #374151); /* gray-700 */
+            color: var(--settings-btn-text-dark, #d1d5db); /* gray-300 */
+            border: 1px solid var(--settings-btn-border-dark, #4b5563); /* gray-600 */
+        }
+
+        [data-theme="dark"] .settings-button:hover {
+            background-color: var(--settings-btn-hover-bg-dark, #4b5563); /* gray-600 */
+        }
+
+        /* Убедимся, что иконка имеет фиксированный размер и не растягивается */
+        .settings-button i {
+            width: 1rem; /* 16px */
+            height: 1rem;
+            /* Можно добавить flex-shrink: 0, чтобы иконка не сжималась */
+            flex-shrink: 0;
+        }
+
+        /* Стили для текста внутри кнопки */
+        .settings-button span {
+            /* Можно добавить white-space: nowrap, если хочешь, чтобы текст не переносился */
+            white-space: nowrap;
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.875rem;
+            color: var(--text-color);
+            margin-top: 0.5rem;
+            width: 100%;
+        }
+
+        .progress-container {
+            margin: 1rem 0;
+            width: 100%;
+        }
+
+        .progress-label {
+            font-size: 0.875rem;
+            color: var(--text-color);
+            margin-bottom: 0.25rem;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 0.5rem;
+            background-color: var(--progress-bar-bg);
+            border-radius: 0.25rem;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background-color: var(--progress-bar-fill);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .controls-row {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin: 1.5rem 0;
+            flex-wrap: wrap;
+            width: 100%;
+        }
+
+        .log-container {
+            margin-top: 1.5rem;
+            display: none; /* Скрыто по умолчанию */
+            width: 100%;
+        }
+
+        .log-area {
+            width: 100%;
+            height: 150px;
+            padding: 0.75rem;
+            background-color: var(--log-bg);
+            border: 1px solid var(--log-border);
+            border-radius: 0.375rem;
+            color: var(--log-text);
+            font-family: monospace;
+            font-size: 0.875rem;
+            resize: vertical;
+        }
+
+        .loader {
+            width: 1rem;
+            height: 1rem;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Стили для вкладки настроек */
+        .settings-section {
+            display: none; /* Скрыта по умолчанию */
+            width: 100%;
+        }
+
+        .settings-item {
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            background-color: var(--status-section-bg);
+            border-radius: 0.375rem;
+            border: 1px solid var(--status-section-border);
+        }
+
+        .settings-title {
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+        }
+
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .theme-toggle input[type="checkbox"] {
+            width: 1.5rem;
+            height: 1.5rem;
+            accent-color: #2563eb; /* blue-600 */
+        }
+
+        .update-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .update-status {
+            font-size: 0.875rem;
+            color: var(--text-color);
+        }
+
+                /* ... (предыдущие стили) ... */
+
+        /* --- Стили для формы обратной связи --- */
+        #feedback-form {
+            padding: 0.75rem;
+            background-color: var(--feedback-bg, #f3f4f6); /* gray-100 по умолчанию */
+            border-radius: 0.375rem;
+            border: 1px solid var(--feedback-border, #d1d5db); /* gray-300 по умолчанию */
+            color: var(--feedback-text, #111827); /* gray-900 по умолчанию */
+        }
+
+        #feedback-form .text-sm {
+            color: var(--feedback-text-sm, #4b5563); /* gray-600 по умолчанию */
+        }
+
+        #feedback-form .block {
+            color: var(--feedback-label, #4b5563); /* gray-600 по умолчанию */
+        }
+
+        #feedback-form .folder-input {
+            background-color: var(--feedback-input-bg, #f9fafb); /* gray-50 по умолчанию */
+            border: 1px solid var(--feedback-input-border, #d1d5db); /* gray-300 по умолчанию */
+            color: var(--feedback-input-text, #111827); /* gray-900 по умолчанию */
+        }
+
+        #feedback-form .folder-input:focus {
+            border-color: var(--feedback-input-focus, #60a5fa); /* blue-400 по умолчанию */
+            outline: none;
+        }
+
+        #feedback-form .checkbox-input {
+            accent-color: var(--feedback-checkbox-accent, #2563eb); /* blue-600 по умолчанию */
+        }
+
+        #feedback-form .checkbox-input:checked {
+            background-color: var(--feedback-checkbox-checked, #2563eb); /* blue-600 по умолчанию */
+        }
+
+        #feedback-form .btn {
+            background-color: var(--feedback-btn-bg, #f3f4f6); /* gray-100 по умолчанию */
+            color: var(--feedback-btn-text, #4b5563); /* gray-600 по умолчанию */
+            border: 1px solid var(--feedback-btn-border, #d1d5db); /* gray-300 по умолчанию */
+        }
+
+        #feedback-form .btn:hover {
+            background-color: var(--feedback-btn-hover-bg, #e5e7eb); /* gray-200 по умолчанию */
+        }
+
+        #feedback-form .btn-primary {
+            background-color: var(--feedback-btn-primary-bg, #f87171); /* red-400 по умолчанию */
+            color: white;
+            border: 1px solid var(--feedback-btn-primary-border, #fca5a5); /* red-300 по умолчанию */
+        }
+
+        #feedback-form .btn-primary:hover {
+            background-color: var(--feedback-btn-primary-hover-bg, #ef4444); /* red-500 по умолчанию */
+        }
+
+        #feedback-form .btn-secondary {
+            background-color: var(--feedback-btn-secondary-bg, #3b82f6); /* blue-500 по умолчанию */
+            color: white;
+            border: 1px solid var(--feedback-btn-secondary-border, #60a5fa); /* blue-400 по умолчанию */
+        }
+
+        #feedback-form .btn-secondary:hover {
+            background-color: var(--feedback-btn-secondary-hover-bg, #2563eb); /* blue-600 по умолчанию */
+        }
+
+        #feedback-form .btn-outline {
+            background-color: var(--feedback-btn-outline-bg, transparent);
+            border: 1px solid var(--feedback-btn-outline-border, #d1d5db); /* gray-300 по умолчанию */
+            color: var(--feedback-btn-outline-text, #4b5563); /* gray-600 по умолчанию */
+        }
+
+        #feedback-form .btn-outline:hover {
+            background-color: var(--feedback-btn-outline-hover-bg, #f3f4f6); /* gray-100 по умолчанию */
+        }
+
+        #feedback-form .text-xs {
+            color: var(--feedback-text-xs, #4b5563); /* gray-600 по умолчанию */
+        }
+
+        #feedback-form .text-red-500 {
+            color: var(--feedback-text-red, #ef4444); /* red-500 по умолчанию */
+        }
+
+        #feedback-form .text-green-500 {
+            color: var(--feedback-text-green, #10b981); /* emerald-500 по умолчанию */
+        }
+
+        /* --- Темные стили для формы обратной связи --- */
+        [data-theme="dark"] #feedback-form {
+            background-color: var(--feedback-bg-dark, #1f2937); /* gray-800 */
+            border: 1px solid var(--feedback-border-dark, #374151); /* gray-700 */
+            color: var(--feedback-text-dark, #e5e7eb); /* gray-200 */
+        }
+
+        [data-theme="dark"] #feedback-form .text-sm {
+            color: var(--feedback-text-sm-dark, #d1d5db); /* gray-300 */
+        }
+
+        [data-theme="dark"] #feedback-form .block {
+            color: var(--feedback-label-dark, #d1d5db); /* gray-300 */
+        }
+
+        [data-theme="dark"] #feedback-form .folder-input {
+            background-color: var(--feedback-input-bg-dark, #374151); /* gray-700 */
+            border: 1px solid var(--feedback-input-border-dark, #4b5563); /* gray-600 */
+            color: var(--feedback-input-text-dark, #e5e7eb); /* gray-200 */
+        }
+
+        [data-theme="dark"] #feedback-form .folder-input:focus {
+            border-color: var(--feedback-input-focus-dark, #3b82f6); /* blue-500 */
+        }
+
+        [data-theme="dark"] #feedback-form .checkbox-input {
+            accent-color: var(--feedback-checkbox-accent-dark, #3b82f6); /* blue-500 */
+        }
+
+        [data-theme="dark"] #feedback-form .checkbox-input:checked {
+            background-color: var(--feedback-checkbox-checked-dark, #3b82f6); /* blue-500 */
+        }
+
+        [data-theme="dark"] #feedback-form .btn {
+            background-color: var(--feedback-btn-bg-dark, #374151); /* gray-700 */
+            color: var(--feedback-btn-text-dark, #d1d5db); /* gray-300 */
+            border: 1px solid var(--feedback-btn-border-dark, #4b5563); /* gray-600 */
+        }
+
+        [data-theme="dark"] #feedback-form .btn:hover {
+            background-color: var(--feedback-btn-hover-bg-dark, #4b5563); /* gray-600 */
+        }
+
+        [data-theme="dark"] #feedback-form .btn-primary {
+            background-color: var(--feedback-btn-primary-bg-dark, #dc2626); /* red-600 */
+            color: white;
+            border: 1px solid var(--feedback-btn-primary-border-dark, #b91c1c); /* red-700 */
+        }
+
+        [data-theme="dark"] #feedback-form .btn-primary:hover {
+            background-color: var(--feedback-btn-primary-hover-bg-dark, #b91c1c); /* red-700 */
+        }
+
+        [data-theme="dark"] #feedback-form .btn-secondary {
+            background-color: var(--feedback-btn-secondary-bg-dark, #2563eb); /* blue-600 */
+            color: white;
+            border: 1px solid var(--feedback-btn-secondary-border-dark, #3b82f6); /* blue-500 */
+        }
+
+        [data-theme="dark"] #feedback-form .btn-secondary:hover {
+            background-color: var(--feedback-btn-secondary-hover-bg-dark, #1d4ed8); /* blue-700 */
+        }
+
+        [data-theme="dark"] #feedback-form .btn-outline {
+            background-color: var(--feedback-btn-outline-bg-dark, transparent);
+            border: 1px solid var(--feedback-btn-outline-border-dark, #4b5563); /* gray-600 */
+            color: var(--feedback-btn-outline-text-dark, #d1d5db); /* gray-300 */
+        }
+
+        [data-theme="dark"] #feedback-form .btn-outline:hover {
+            background-color: var(--feedback-btn-outline-hover-bg-dark, #4b5563); /* gray-600 */
+        }
+
+        [data-theme="dark"] #feedback-form .text-xs {
+            color: var(--feedback-text-xs-dark, #d1d5db); /* gray-300 */
+        }
+
+        [data-theme="dark"] #feedback-form .text-red-500 {
+            color: var(--feedback-text-red-dark, #f87171); /* red-400 */
+        }
+
+        [data-theme="dark"] #feedback-form .text-green-500 {
+            color: var(--feedback-text-green-dark, #10b981); /* emerald-500 */
+        }
+
+        /* --- Стили для всплывающего уведомления об обновлении (Toast) --- */
+        .update-notification {
+            position: fixed;
+            bottom: 20px; /* Прижимаем к низу */
+            right: 20px; /* Отступ справа */
+            z-index: 1000; /* Выше других элементов */
+            background-color: var(--notification-bg, #fffbeb); /* yellow-50 по умолчанию */
+            border: 1px solid var(--notification-border, #fde68a); /* yellow-200 по умолчанию */
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            padding: 1rem;
+            max-width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            opacity: 0;
+            transform: translateY(20px); /* Начальное положение чуть ниже */
+            transition: opacity 0.3s ease, transform 0.3s ease; /* Плавное появление/исчезновение */
+        }
+
+        .update-notification.hidden {
+            display: none; /* <-- Полностью убирает элемент из потока документа */
+        }
+
+        .update-notification:not(.hidden) {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        [data-theme="dark"] .update-notification {
+            background-color: var(--notification-bg-dark, #451a03); /* amber-900 */
+            border: 1px solid var(--notification-border-dark, #f59e0b); /* amber-500 */
+            color: var(--notification-text-dark, #fed7aa); /* amber-200 */
+        }
+
+        .update-notification-content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .update-notification-text {
+            margin: 0;
+            font-size: 0.875rem;
+            color: var(--notification-text, #92400e); /* amber-700 по умолчанию */
+        }
+
+        [data-theme="dark"] .update-notification-text {
+            color: var(--notification-text-dark, #fed7aa); /* amber-200 */
+        }
+
+        .update-notification-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+
+        .app-popup {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #323232;
+        color: #fff;
+        padding: 12px 18px;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        font-size: 14px;
+        opacity: 0;
+        transform: translateY(15px);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        z-index: 9999;
+        }
+
+        .app-popup:not(.hidden) {
+        opacity: 1;
+        transform: translateY(0);
+        }
+
+        .app-popup.hidden {
+        opacity: 0;
+        pointer-events: none;
+        }
+
+        
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">Работа с PDF</div>
+
+        <button id="nav-mode1" class="nav-button active">
+            ЗЭПБ(с увед)
+        </button>
+
+        <button id="nav-mode-compress" class="nav-button">
+            Сжатие PDF
+        </button>
+
+        <button id="nav-mode3" class="nav-button">
+            Режим 2
+        </button>
+
+        <button id="nav-mode4" class="nav-button">
+            Режим 2
+        </button>
+
+        <button id="nav-mode5" class="nav-button">
+            Режим 2
+        </button>
+
+        <button id="nav-mode6" class="nav-button">
+            Режим 2
+        </button>
+
+        <button id="nav-mode7" class="nav-button">
+            Режим 2
+        </button>
+
+        <button id="nav-mode8" class="nav-button">
+            Режим 2
+        </button>
+
+        <button id="nav-mode9" class="nav-button">
+            Режим 2
+        </button>
+
+        <button id="nav-mode10" class="nav-button">
+            Режим 2
+        </button>
+
+        <!-- Футер сайдбара с кнопкой настроек -->
+         <div class="sidebar-footer">
+            <button id="nav-settings" class="settings-button">
+                <i data-lucide="settings" class="w-4 h-4"></i>
+                <span>Настройки</span>
+            </button>
+            <div class="text-xs text-gray-500 text-center mt-1">version 1.3.8</div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <!-- Содержимое режима 1 -->
+        <div id="mode1-content" class="content-section">
+            <div class="content-header">
+                Уведомление + ЗЭПБ
+            </div>
+
+            <div class="folder-section">
+                <!-- Папка с ЗЭПБ -->
+                <div class="folder-group">
+                    <label class="folder-label">Папка с ЗЭПБ</label>
+                    <div class="folder-input-container">
+                        <input type="text" id="label-main" value="Не выбрана" readonly class="folder-input">
+                        <button id="btn-main" class="btn btn-primary">
+                            Выбрать
+                        </button>
+                    </div>
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="chk-main-recursive" checked class="checkbox-input">
+                        <label for="chk-main-recursive" class="checkbox-label">искать в подпапках</label>
+                    </div>
+                </div>
+
+                <!-- Папка с уведомлениями -->
+                <div class="folder-group">
+                    <label class="folder-label">Папка с уведомлениями</label>
+                    <div class="folder-input-container">
+                        <input type="text" id="label-insert" value="Не выбрана" readonly class="folder-input">
+                        <button id="btn-insert" class="btn btn-primary">
+                            Выбрать
+                        </button>
+                    </div>
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="chk-insert-recursive" checked class="checkbox-input">
+                        <label for="chk-insert-recursive" class="checkbox-label">искать в подпапках</label>
+                    </div>
+                </div>
+
+                <!-- Папка с результатами -->
+                <div class="folder-group">
+                    <label class="folder-label">Папка с результатами</label>
+                    <div class="folder-input-container">
+                        <input type="text" id="label-output" value="Не выбрана" readonly class="folder-input">
+                        <button id="btn-output" class="btn btn-primary">
+                            Выбрать
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-section">
+                <div class="status-info">
+                    <span>ЗЭПБ: <span id="stats-zepb">0</span></span>
+                    <span>Уведомления: <span id="stats-notif">0</span></span>
+                    <span>Результаты: <span id="stats-output">0</span></span>
+                </div>
+                <div id="stats-status" class="status-not-ready">Выберите все папки</div>
+            </div>
+
+            <!-- НОВОЕ: Прогресс-бар (всегда виден) -->
+            <div id="progress-container" class="progress-container">
+                <div class="progress-label">Прогресс выполнения:</div>
+                <div class="progress-bar">
+                    <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                </div>
+                <!-- Статистика после выполнения -->
+                <div id="stats-results" class="stats-row" style="display: none;">
+                    <span>Успешно: <span id="stats-success">0</span></span>
+                    <span>Пропущено: <span id="stats-skipped">0</span></span>
+                    <span>Всего: <span id="stats-total">0</span></span>
+                </div>
+            </div>
+
+            <div class="controls-row">
+                <button id="btn-run" class="btn btn-secondary" disabled>
+                    Начать объединение
+                </button>
+                <button id="btn-open-output" class="btn btn-outline" disabled>
+                    Открыть папку
+                </button>
+                <button id="btn-clear-settings" class="btn btn-primary">
+                    Очистить
+                </button>
+            </div>
+
+            <div id="log-container" class="log-container">
+                <textarea id="log" readonly class="log-area"></textarea>
+            </div>
+        </div>
+
+            <!-- Содержимое вкладки Настройки -->
+            <div id="settings-content" class="settings-section" style="display: none;">
+                <div class="content-header">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                    Настройки
+                </div>
+
+                <div class="settings-item">
+                    <div class="settings-title">Тема</div>
+                    <div class="theme-toggle">
+                        <input type="checkbox" id="theme-toggle-checkbox">
+                        <label for="theme-toggle-checkbox">Темная тема</label>
+                    </div>
+                </div>
+
+                <div class="settings-item">
+                    <div class="settings-title">Обновления</div>
+                    <div class="update-controls">
+                        <button id="btn-check-update" class="btn btn-secondary">
+                            Проверить обновления
+                        </button>
+                        <span id="update-status" class="update-status">Проверка обновлений...</span>
+                        <button id="btn-update-app" class="btn btn-primary" style="display: none;">Установить обновление</button>
+                    </div>
+                </div>
+
+                <div class="settings-item">
+                    <div class="settings-title">Обратная связь</div>
+                    <div id="feedback-form" class="feedback-controls">
+                        <p class="text-sm text-gray-600 mb-2">Нашли ошибку или есть предложение по улучшению?</p>
+                        
+                        <div class="mb-3">
+                            <label for="feedback-type" class="block text-xs font-medium text-gray-700 mb-1">Тип сообщения</label>
+                            <select id="feedback-type" class="folder-input w-full text-sm">
+                                <option value="bug">Ошибка</option>
+                                <option value="feature">Предложение по улучшению</option>
+                                <option value="other">Другое</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="feedback-message" class="block text-xs font-medium text-gray-700 mb-1">Сообщение *</label>
+                            <textarea id="feedback-message" rows="4" class="folder-input w-full text-sm" placeholder="Опишите проблему или предложение..."></textarea>
+                        </div>
+
+                        <div class="flex items-center mb-4">
+                            <input type="checkbox" id="feedback-include-log" class="checkbox-input mr-2">
+                            <label for="feedback-include-log" class="text-xs text-gray-600">Приложить последний лог (поможет быстрее решить проблему)</label>
+                        </div>
+
+                        <div class="flex flex-wrap items-center">
+                            <button id="btn-send-feedback" class="btn btn-outline text-sm">
+                                Отправить Email
+                            </button>
+                            <span id="feedback-status" class="ml-3 text-xs"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Обновлённый фрагмент compress-content: все контролы сжатиия обёрнуты в #compress-controls -->
+<div id="compress-content" class="content-section" style="display: none;">
+  <div class="content-header">Сжатие PDF</div>
+
+  <div id="compress-controls">
+    <div class="folder-section">
+      <div class="folder-group">
+        <label class="folder-label">Папка с PDF (вход)</label>
+        <div class="folder-input-container">
+          <input type="text" id="label-compress" value="Не выбрана" readonly class="folder-input">
+          <button id="btn-compress" class="btn btn-primary">Выбрать</button>
+        </div>
+
+        <div style="margin-top:0.75rem; display:flex; align-items:center; gap:8px;">
+          <label for="compress-quality" style="margin:0; font-size:13px; color:var(--text-color);">Качество:</label>
+          <select id="compress-quality" class="folder-input" style="width:140px; padding:6px;">
+            <option value="10">Очень слабое (≈10%)</option>
+            <option value="20">Низкое (≈20%)</option>
+            <option value="30" selected>Среднее (≈30%)</option>
+            <option value="40">Высокое (≈40%)</option>
+            <option value="50">Макс. качество (≈50%)</option>
+          </select>
+          <div style="flex:1"></div>
+        </div>
+      </div>
+
+      <div class="folder-group">
+        <label class="folder-label">Папка результатов (выход)</label>
+        <div class="folder-input-container">
+          <input type="text" id="label-compress-output" value="Не выбрана" readonly class="folder-input">
+          <button id="btn-compress-output" class="btn btn-primary">Выбрать</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px;margin-bottom:6px;">Прогресс сжатия</div>
+          <div style="height:10px;background:var(--progress-bar-bg);border-radius:6px;overflow:hidden;">
+            <div id="compress-progress-fill" style="height:100%; width:0%; background:var(--progress-bar-fill); transition:width .25s ease;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <div style="width:100%; overflow:auto;">
+          <table id="compress-table" style="width:100%; border-collapse:collapse; font-family:monospace; font-size:13px; min-width:700px;">
+            <thead>
+              <tr style="text-align:left; border-bottom:1px solid var(--sidebar-border);">
+                <th style="padding:6px 8px; width:40px;">#</th>
+                <th style="padding:6px 8px;">Файл</th>
+                <th style="padding:6px 8px; width:120px;">Исходный</th>
+                <th style="padding:6px 8px; width:120px;">Результат</th>
+                <th style="padding:6px 8px; width:90px;">Изм., %</th>
+                <th style="padding:6px 8px; width:140px;">Статус</th>
+              </tr>
+            </thead>
+            <tbody style="max-height:280px; display:block; overflow:auto; width:100%;"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls-row" style="margin-top:12px;">
+      <button id="btn-compress-run" class="btn btn-secondary" disabled>Начать сжатие</button>
+    </div>
+  </div>
+</div>
+    <!-- Всплывающее уведомление об обновлении (по умолчанию скрыто) -->
+    <div id="update-notification" class="update-notification hidden">
+  <div class="update-notification-content">
+    <p id="update-notification-text" class="update-notification-text">Доступна новая версия. Проверьте наличие обновлений в настройках приложения.</p>
+    <div class="update-notification-actions">
+      <!-- ДОБАВЛЕНО: кнопка "Обновить" -->
+      <button id="btn-update-popup" class="btn btn-primary btn-sm">Обновить</button>
+      <button id="btn-dismiss-popup" class="btn btn-outline btn-sm">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+    <script src="./renderer.js"></script>
+</body>
+</html>
