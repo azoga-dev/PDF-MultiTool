@@ -37,6 +37,8 @@ declare global {
       checkForUpdates: () => Promise<null>;
       downloadUpdate: () => Promise<boolean>;
       quitAndInstall: () => Promise<void>;
+      // Подсчитать PDF-файлы в папке
+      countPdfFilesInFolder: (folderPath: string) => Promise<number>;
 
       // Логирование: отправка и управление окном логов
       appendLog: (line: string) => void;

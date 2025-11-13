@@ -816,6 +816,39 @@ ipcMain.handle('compress-pdfs', async (_e, { inputFolder, outputFolder, quality 
   }
 });
 
+// IPC: подсчитать количество PDF-файлов в папке (рекурсивно)
+ipcMain.handle('count-pdf-files-in-folder', async (_e, folderPath: string) => {
+  const countPdf = async (dir: string): Promise<number> => {
+    let total = 0;
+    try {
+      const entries = await fsp.readdir(dir, { withFileTypes: true });
+      for (const ent of entries) {
+        const full = path.join(dir, ent.name);
+        if (ent.isFile()) {
+          if (ent.name.toLowerCase().endsWith('.pdf')) total++;
+        } else if (ent.isDirectory()) {
+          // рекурсивно
+          total += await countPdf(full);
+        }
+      }
+    } catch (err) {
+      // если не доступна папка — возвращаем 0
+      return 0;
+    }
+    return total;
+  };
+
+  try {
+    if (!folderPath) return 0;
+    const st = await fsp.stat(folderPath).catch(() => null);
+    if (!st || !st.isDirectory()) return 0;
+    const result = await countPdf(folderPath);
+    return result;
+  } catch {
+    return 0;
+  }
+});
+
 /* Обновления и инфо */
 ipcMain.handle('check-for-updates', async () => { try { autoUpdater.checkForUpdates(); } catch (e) { mainWindow?.webContents.send('update-error', (e as Error).message); } });
 ipcMain.handle('download-update', async () => { try { await autoUpdater.downloadUpdate(); return true; } catch { return false; } });

@@ -738,6 +738,18 @@
         opacity: 0;
         pointer-events: none;
         }      
+
+        .hide-scrollbar {
+        overflow-y: auto;      /* или overflow: auto / scroll по месту */
+        overflow-x: hidden;    /* запрещаем горизонтальную прокрутку */
+        -ms-overflow-style: none; /* IE 10+ */
+        scrollbar-width: none;    /* Firefox */
+        }
+
+        /* WebKit (Chrome, Edge, Safari) */
+        .hide-scrollbar::-webkit-scrollbar {
+        display: none;
+        }
     </style>
     <style id="compress-ui-extra">
     .compress-progress-header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:8px; }
@@ -890,7 +902,7 @@
         </div>
     </div>
 
-    <div class="main-content">
+    <div class="main-content hide-scrollbar">
         <!-- Содержимое режима 1 -->
         <div id="mode1-content" class="content-section">
             <div class="content-header">
@@ -1120,6 +1132,7 @@
 
     <div class="controls-row" style="margin-top:14px;">
       <button id="btn-compress-run" class="btn btn-secondary" disabled>Начать сжатие</button>
+      <button id="btn-compress-clear" class="btn btn-outline" title="Очистить настройки сжатия">Очистить</button>
     </div>
   </div>
 </div>

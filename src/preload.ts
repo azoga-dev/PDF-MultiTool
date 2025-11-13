@@ -49,6 +49,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Проверка — является ли путь директорией
   pathIsDirectory: (p: string) => ipcRenderer.invoke('path-is-directory', p),
 
+  // Подсчитать количество PDF-файлов в папке (рекурсивно)
+  countPdfFilesInFolder: (folderPath: string) => ipcRenderer.invoke('count-pdf-files-in-folder', folderPath),
+
   // Обновления
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),

@@ -84,6 +84,7 @@ const compressProgressPercent = document.getElementById('compress-progress-perce
 const compressStatusLabel = document.getElementById('compress-status-label') as HTMLSpanElement | null;
 const compressTableBody = document.querySelector('#compress-table tbody') as HTMLTableSectionElement | null;
 const btnOpenReport = document.getElementById('btn-open-report') as HTMLButtonElement | null;
+const btnCompressClear = document.getElementById('btn-compress-clear') as HTMLButtonElement | null;
 
 /* Динамически создаём кнопку "Открыть лог", если её нет в DOM */
 (function ensureLogButton() {
@@ -252,6 +253,15 @@ function updateCompressReady() {
       const folder = await window.electronAPI.selectFolder(lastSelectedCompress ?? undefined);
       if (folder) {
         lastSelectedCompress = folder;
+        try {
+          const pdfCount = await window.electronAPI.countPdfFilesInFolder(folder!);
+          if (typeof pdfCount === 'number' && pdfCount === 0) {
+            log(`Выбранная папка ${folder} не содержит PDF`, 'warning');
+            showPopup('В выбранной папке нет pdf файлов', 6000);
+          }
+        } catch (err) {
+          log(`Ошибка проверки PDF в выбранной папке: ${(err as Error).message}`, 'error');
+        }
         if (labelCompress) labelCompress.value = folder;
 
         // Если папка вывода для сжатия не выбрана — автоназначим ту же папку (удобство)
@@ -261,6 +271,20 @@ function updateCompressReady() {
           if (labelCompressOutput) labelCompressOutput.value = folder;
           try { await saveSettings(); } catch { /* ignore */ }
         }
+      }
+      try {
+        // Используем существующий метод preload -> main (countFilesInFolder)
+        const cnt = await window.electronAPI.countFilesInFolder(folder!);
+        if (typeof cnt === 'number' && cnt === 0) {
+          const msg = `Выбранная папка "${folder}" пуста`;
+          log(msg, 'warning');
+          showPopup('В выбранной папке нет файлов PDF', 6000);
+        } else {
+          // можно логировать число файлов (необязательно)
+          log(`В папке "${folder}" найдено ${typeof cnt === 'number' ? cnt : '?'} файлов`, 'info');
+        }
+      } catch (err) {
+        log(`Ошибка проверки папки: ${(err as Error).message}`, 'error');
       }
       updateCompressReady();
     } finally {
@@ -282,6 +306,15 @@ function updateCompressReady() {
         if (labelCompressOutput) labelCompressOutput.value = folder;
         try { await saveSettings(); } catch { /* ignore */ }
       }
+      try {
+        const cntOut = await window.electronAPI.countFilesInFolder(folder!).catch(() => -1);
+        log(`Папка вывода для сжатия установлена: ${folder}`, 'info');
+        if (typeof cntOut === 'number' && cntOut === 0) {
+          showPopup('Папка вывода пуста (это нормально)', 4000);
+        }
+      } catch (err) {
+        log(`Ошибка проверки папки вывода: ${(err as Error).message}`, 'error');
+      }
       updateCompressReady();
     } finally {
       btnCompressOutput.innerHTML = orig;
@@ -293,14 +326,43 @@ function updateCompressReady() {
   if (btnCompressRun) btnCompressRun.addEventListener('click', async () => {
     // вход — либо выбранная папка, либо droppedFiles
     if ((!labelCompress || !labelCompress.value || labelCompress.value === 'Не выбрана') && (!droppedFiles || droppedFiles.length === 0)) {
-      showPopup('Выберите папку или перетащите файлы', 5000);
-      return;
-    }
-    if (!compressOutputFolder) {
-      showPopup('Выберите папку результата (выход)', 5000);
+      const msg = 'Входная папка не выбрана и файлы не переложены';
+      log(msg, 'warning');
+      showPopup('Выберите папку или перетащите файлы для сжатия', 6000);
       return;
     }
 
+    if (!compressOutputFolder) {
+      const msg = 'Папка результатов не выбрана';
+      log(msg, 'warning');
+      showPopup('Выберите папку результатов (выход)', 6000);
+      return;
+    }
+
+    // если выбранная входная папка (не droppedFiles) — проверим её наличие и непустоту по PDF
+    if ((!droppedFiles || droppedFiles.length === 0) && labelCompress && labelCompress.value && labelCompress.value !== 'Не выбрана') {
+      try {
+        const pdfCount = await window.electronAPI.countPdfFilesInFolder(labelCompress.value);
+        if (typeof pdfCount === 'number') {
+          if (pdfCount === 0) {
+            const msg = `В выбранной папке "${labelCompress.value}" нет PDF файлов`;
+            log(msg, 'warning');
+            showPopup('В выбранной папке нет pdf файлов', 6000);
+            return;
+          } else {
+            log(`В папке входа найдено ${pdfCount} PDF файлов`, 'info');
+          }
+        } else {
+          log(`Не удалось определить количество PDF в папке ${labelCompress.value}`, 'warning');
+        }
+      } catch (err) {
+        log(`Ошибка проверки PDF в входной папке: ${(err as Error).message}`, 'error');
+        showPopup('Ошибка при проверке папки входа. Проверьте лог.', 6000);
+        return;
+      }
+    }
+
+    // Всё ок — продолжаем запуск
     const quality = selectCompressQuality ? parseInt(selectCompressQuality.value, 10) : 30;
     log(`Запущено сжатие: ${labelCompress?.value || '(перетащенные файлы)'} -> ${compressOutputFolder}, качество ${quality}%`, 'info');
 
@@ -309,6 +371,7 @@ function updateCompressReady() {
     setBusy(true);
     try {
       clearCompressTable();
+
       if (droppedFiles && droppedFiles.length > 0) {
         const res = await window.electronAPI.compressFiles({ files: droppedFiles, outputFolder: compressOutputFolder!, quality });
         if (res && Array.isArray(res.log)) res.log.forEach((m: string) => log(m, m.includes('Ошибка') ? 'error' : 'info'));
@@ -316,11 +379,13 @@ function updateCompressReady() {
         const res = await window.electronAPI.compressPDFs({ inputFolder: labelCompress!.value, outputFolder: compressOutputFolder!, quality });
         if (res && Array.isArray(res.log)) res.log.forEach((m: string) => log(m, m.includes('Ошибка') ? 'error' : 'info'));
       }
+
       updateStats();
     } catch (err) {
       log(`Ошибка при сжатии: ${(err as Error).message}`, 'error');
       showPopup('Ошибка при сжатии. Проверьте лог.', 8000);
     } finally {
+      // очистка droppedFiles и восстановление UI
       droppedFiles = [];
       const countEl = document.getElementById('compress-drop-count') as HTMLSpanElement | null;
       if (countEl) { countEl.style.display = 'none'; countEl.textContent = '0'; }
@@ -328,6 +393,32 @@ function updateCompressReady() {
       isCompressRunning = false;
       setBusy(false);
     }
+  });
+
+  if (btnCompressClear) btnCompressClear.addEventListener('click', async () => {
+    if (!confirm('Очистить настройки сжатия?')) return;
+
+    // Сбросим переменные состояния
+    lastSelectedCompress = null;
+    lastSelectedCompressOutputFolder = null;
+    compressOutputFolder = null;
+    droppedFiles = [];
+
+    // Обновим UI поля
+    try {
+      if (labelCompress) updateFolderLabel(labelCompress, null);
+      if (labelCompressOutput) updateFolderLabel(labelCompressOutput, null);
+    } catch (e) { /* ignore */ }
+
+    // Сохраним пустые настройки
+    try { await saveSettings(); } catch (err) { log(`Ошибка сохранения настроек: ${(err as Error).message}`, 'error'); }
+
+    // Очистка таблицы и прогресса
+    try { clearCompressTable(); } catch {}
+
+    log('Настройки сжатия очищены', 'warning');
+    showPopup('Настройки сжатия очищены', 4000);
+    updateCompressReady();
   });
 
   function layoutCompressResize() {
