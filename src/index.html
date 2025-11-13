@@ -812,6 +812,29 @@
         );
     }
     </style>
+    <style id="compress-dropzone-styles">
+    #compress-drop-hint {
+        margin-top: 8px;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px dashed var(--sidebar-border);
+        color: var(--text-color);
+        background: transparent;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    #compress-drop-hint.drop-over {
+        background: rgba(99,102,241,0.06);
+        border-color: var(--progress-bar-fill);
+    }
+    #compress-drop-hint small { color: var(--muted-text, #6b7280); font-size: 12px; }
+    #compress-drop-count {
+        display:inline-block; min-width:28px; padding:2px 8px; border-radius:12px;
+        background:var(--sidebar-border); color:var(--text-color); font-size:12px; text-align:center;
+    }
+    </style>
 </head>
 <body>
     <div class="sidebar">
@@ -1049,6 +1072,12 @@
           <input type="text" id="label-compress-output" value="Не выбрана" readonly class="folder-input">
           <button id="btn-compress-output" class="btn btn-primary">Выбрать</button>
         </div>
+      </div>
+
+      <div id="compress-drop-hint" title="Перетащите PDF файлы сюда">
+        <span style="opacity:0.9;">Перетащите PDF файлы для сжатия</span>
+        <small style="margin-left:auto;">Или выберите папку</small>
+        <span id="compress-drop-count" style="display:none;margin-left:8px;">0</span>
       </div>
     </div>
 

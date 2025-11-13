@@ -44,6 +44,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Сжатие PDF (main)
   compressPDFs: (opts: { inputFolder: string, outputFolder: string, quality?: number }) => ipcRenderer.invoke('compress-pdfs', opts),
+  compressFiles: (opts: { files: string[]; outputFolder: string; quality?: number }) => ipcRenderer.invoke('compress-files', opts),
+  
+  // Проверка — является ли путь директорией
+  pathIsDirectory: (p: string) => ipcRenderer.invoke('path-is-directory', p),
 
   // Обновления
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
