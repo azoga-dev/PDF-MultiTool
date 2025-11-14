@@ -711,27 +711,42 @@ window.electronAPI.onMergeProgress((_, payload) => {
 });
 
 window.electronAPI.onMergeComplete((_, payload) => {
-  const { processed, skipped, total, errors, log: logs, registry, canceled } = payload as any;
-  log('\n=== Обработка завершена ===', 'info');
-  log(`Успешно: ${processed}`, 'info');
-  log(`Пропущено: ${skipped}`, 'info');
-  log(`Всего: ${total}`, 'info');
-  if (registry) log(`Реестр: ${registry}`, 'info');
-  if (canceled) {
-    log('Операция была отменена пользователем', 'warning');
-    showPopup('Объединение отменено пользователем', 8000);
-  } else if (errors && errors.length) {
-    log(`Ошибки: ${errors.length}`, 'error');
-    showPopup(`Объединение завершено с ошибками (${errors.length}). Проверьте лог.`, 12000);
-  } else {
-    showPopup('Объединение завершено успешно.', 8000);
+  try {
+    const { processed, skipped, total, errors, log: logs, registry, canceled } = payload as any;
+
+    log('\n=== Обработка завершена ===', 'info');
+    log(`Успешно: ${processed}`, 'info');
+    log(`Пропущено: ${skipped}`, 'info');
+    log(`Всего: ${total}`, 'info');
+    if (Array.isArray(logs)) logs.forEach((m: string) => log(m, m.includes('Ошибка') ? 'error' : m.includes('Объединено') ? 'success' : 'info'));
+
+    if (registry) {
+      lastReportPath = registry;
+      const btnOpenReport = document.getElementById('btn-open-report') as HTMLButtonElement | null;
+      if (btnOpenReport) btnOpenReport.disabled = false;
+      log(`Реестр сформирован: ${registry}`, 'info');
+    }
+
+    if (canceled) {
+      log('Операция была отменена пользователем', 'warning');
+      showPopup('Объединение отменено пользователем', 8000);
+    } else if (errors && errors.length) {
+      log(`Ошибки: ${errors.length}`, 'error');
+      showPopup(`Объединение завершено с ошибками (${errors.length}). Проверьте лог.`, 12000);
+    } else {
+      showPopup('Объединение завершено успешно.', 8000);
+    }
+
+    statsSuccess.textContent = processed.toString();
+    statsSkipped.textContent = skipped.toString();
+    statsTotal.textContent = total.toString();
+    statsResults.style.display = 'flex';
+    updateStats();
+  } catch (err) {
+    console.error('onMergeComplete handler error', err);
+  } finally {
+    setBusy(false);
   }
-  statsSuccess.textContent = processed.toString();
-  statsSkipped.textContent = skipped.toString();
-  statsTotal.textContent = total.toString();
-  statsResults.style.display = 'flex';
-  updateStats();
-  setBusy(false);
 });
 
 /* Навигация и обработчики кнопок */

@@ -4,7 +4,18 @@ import fs from 'fs-extra';
 import { promises as fsp } from 'fs';
 import { PDFDocument } from 'pdf-lib';
 import { autoUpdater } from 'electron-updater';
-import { Document, Packer, Paragraph, TextRun, LevelFormat, AlignmentType } from 'docx';
+import { 
+  Document,
+  Packer, 
+  WidthType, 
+  VerticalAlign, 
+  Table, 
+  TableCell, 
+  TableRow, 
+  Paragraph, 
+  TextRun, 
+  LevelFormat, 
+  AlignmentType } from 'docx';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
@@ -17,6 +28,13 @@ import { randomUUID } from 'crypto';
 const PREFIXES = ["СК", "УА", "СППК", "СПД", "РВС", "ПУ", "П", "ГЗУ"];
 const CODE_REGEX = new RegExp(`(${PREFIXES.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})-\\d+(?:\\.\\d+)?`, 'i');
 const execFileAsync = promisify(execFile);
+
+const cmToTwip = (cm: number) => Math.round(cm * 567); // 1 см = 567 twips
+const pad2 = (n: number) => (n < 10 ? '0' + n : '' + n);
+const formatDateTime = (d: Date) =>
+  `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+const formatDate = (d: Date) =>
+  `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
 
 let mainWindow: BrowserWindow | null = null;
 let logWindow: BrowserWindow | null = null;
@@ -84,47 +102,151 @@ async function buildDict(root: string, recursive: boolean, fileFilter: (full: st
   return dict;
 }
 
-/* Создание .docx реестра: Times New Roman, нумерованный список */
-async function createRegistryDocx(outputFolder: string, processedFiles: string[]) {
-  if (!processedFiles.length) return null;
-  const now = new Date();
-  const formatted = now.toLocaleString('ru-RU', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+/**
+ * Создаёт .docx реестр файлов и сохраняет его в outputFolder.
+ * files — массив имён файлов (basename или относительный путь). Возвращает абсолютный путь созданного файла.
+ */
+async function createRegisterDocx(outputFolder: string, files: string[]): Promise<string> {
+  // Подготовка: имена без расширений
+  const names = files.map((f) => {
+    const b = path.basename(f);
+    const idx = b.lastIndexOf('.');
+    return idx > 0 ? b.slice(0, idx) : b;
+  });
 
-  const numberingConfig = [
-    {
-      reference: 'num-ref',
-      levels: [
-        {
-          level: 0,
-          format: LevelFormat.DECIMAL,
-          text: '%1.',
-          alignment: AlignmentType.START,
-        },
+  // Собираем children секции
+  const children: any[] = [];
+
+  // Заголовок
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'Реестр переданных файлов посредством выгрузки на Лукойл-диск',
+          bold: true,
+          size: 28, // 14pt
+        }),
       ],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 0 },
+    })
+  );
+
+  // Пустая строка
+  children.push(new Paragraph({ text: '' }));
+
+  // Заголовочная строка таблицы
+  const headerRow = new TableRow({
+    children: [
+      new TableCell({
+        verticalAlign: VerticalAlign.CENTER,
+        width: { size: cmToTwip(1.0), type: WidthType.DXA },
+        children: [
+          new Paragraph({
+            children: [new TextRun({ text: '№', bold: true, size: 24 })], // 12pt
+            alignment: AlignmentType.CENTER,
+          }),
+        ],
+      }),
+      new TableCell({
+        verticalAlign: VerticalAlign.CENTER,
+        width: { size: cmToTwip(19.0), type: WidthType.DXA },
+        children: [
+          new Paragraph({
+            children: [new TextRun({ text: 'Наименование файла', bold: true, size: 24 })],
+            alignment: AlignmentType.CENTER,
+          }),
+        ],
+      }),
+    ],
+  });
+
+  // Данные таблицы
+  const dataRows = names.map((nm, i) => {
+    return new TableRow({
+      children: [
+        new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          width: { size: cmToTwip(1.0), type: WidthType.DXA },
+          children: [
+            new Paragraph({
+              children: [new TextRun({ text: String(i + 1), size: 24 })],
+              alignment: AlignmentType.CENTER,
+            }),
+          ],
+        }),
+        new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          width: { size: cmToTwip(19.0), type: WidthType.DXA },
+          children: [
+            new Paragraph({
+              children: [new TextRun({ text: nm, size: 24 })],
+              alignment: AlignmentType.CENTER,
+            }),
+          ],
+        }),
+      ],
+    });
+  });
+
+  const table = new Table({
+    rows: [headerRow, ...dataRows],
+    width: { size: cmToTwip(20.0), type: WidthType.DXA },
+  });
+
+  children.push(table);
+
+  // Пустая строка
+  children.push(new Paragraph({ text: '' }));
+
+  // Дата формирования
+  const now = new Date();
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [
+        new TextRun({ text: 'Дата формирования реестра: ', bold: true, size: 24 }),
+        new TextRun({ text: formatDateTime(now), size: 24 }),
+      ],
+    })
+  );
+
+  // Создаём документ и сохраняем
+  const doc = new Document({
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: {
+              top: cmToTwip(1),
+              bottom: cmToTwip(1),
+              left: cmToTwip(1),
+              right: cmToTwip(1),
+            },
+          },
+        },
+        children,
+      },
+    ],
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: 'Times New Roman',
+            size: 24, // 12pt default
+            color: '000000',
+          },
+        },
+      },
     },
-  ];
+  });
 
-  const children: Paragraph[] = [];
-  children.push(new Paragraph({ children: [new TextRun({ text: 'Реестр обработанных файлов', bold: true, size: 28, font: 'Times New Roman' })] }));
-  children.push(new Paragraph({ text: '' }));
-
-  for (const fname of processedFiles) {
-    children.push(new Paragraph({
-      numbering: { reference: 'num-ref', level: 0 },
-      children: [new TextRun({ text: fname, size: 24, font: 'Times New Roman' })],
-    }));
-  }
-
-  children.push(new Paragraph({ text: '' }));
-  children.push(new Paragraph({ children: [new TextRun({ text: `Дата обработки: ${formatted}`, italics: true, size: 24, font: 'Times New Roman' })] }));
-
-  const doc = new Document({ numbering: { config: numberingConfig }, sections: [{ properties: {}, children }] });
-  const buffer = await Packer.toBuffer(doc);
-  const safeDate = now.toISOString().replace(/[:.]/g, '-').slice(0, 16);
-  const filename = `Реестр обработанных файлов ${safeDate}.docx`;
+  const safeDate = formatDate(now);
+  const filename = `Реестр от ${safeDate}.docx`;
   const outPath = path.join(outputFolder, filename);
+  const buffer = await Packer.toBuffer(doc);
   await fsp.writeFile(outPath, buffer);
-  return filename;
+  return outPath;
 }
 
 let currentThemeIsDark = false; // текущее состояние темы (renderer сообщает main)
@@ -169,9 +291,9 @@ function createLogWindow() {
 
       // 2) Найти styles.css (dist предпочтительно)
       const candidates = [
-        path.join(__dirname, 'styles.css'),              // dist/styles.css
-        path.join(process.cwd(), 'dist', 'styles.css'), // альтернатива
-        path.join(process.cwd(), 'src', 'styles.css'),  // исходник (dev)
+        path.join(__dirname, 'styles.css'),
+        path.join(process.cwd(), 'dist', 'styles.css'),
+        path.join(process.cwd(), 'src', 'styles.css'),
       ];
 
       let cssPath: string | null = null;
@@ -180,7 +302,6 @@ function createLogWindow() {
       }
 
       if (cssPath) {
-        // вставляем внешний CSS в окно логов
         try {
           const css = await fsp.readFile(cssPath, 'utf8');
           await logWindow!.webContents.insertCSS(css);
@@ -190,7 +311,6 @@ function createLogWindow() {
           logStore.push(`[WARN] insertCSS failed: ${(err as Error).message}`);
         }
 
-        // добавляем <link> с file:// для относительных ресурсов (шрифты и пр.)
         try {
           const cssFileUrl = pathToFileURL(cssPath).href;
           await logWindow!.webContents.executeJavaScript(`
@@ -216,57 +336,11 @@ function createLogWindow() {
         logStore.push(`[WARN] ${warn}`);
       }
 
-      // 3) Синхронизировать CSS-переменные из mainWindow в logWindow
-      try {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          // получить все переменные --* из mainWindow
-          const vars: Record<string, string> = await mainWindow.webContents.executeJavaScript(`
-            (function(){
-              try {
-                const cs = getComputedStyle(document.documentElement);
-                const out = {};
-                for (let i = 0; i < cs.length; i++) {
-                  const name = cs[i];
-                  if (name && name.startsWith('--')) {
-                    out[name] = cs.getPropertyValue(name).trim();
-                  }
-                }
-                return out;
-              } catch (e) { return {}; }
-            })();
-          `, true);
+      // 3) Синхронизация CSS‑переменных — отключена для стабильности.
+      // Стили и тема применяются из того же styles.css и события set-theme.
+      logStore.push('[DEBUG] CSS var sync skipped (using shared styles.css + data-theme)');
 
-          // сформировать CSS :root { --var: value; ... }
-          const varsEntries = Object.entries(vars);
-          if (varsEntries.length) {
-            let varsCss = ':root {\\n';
-            for (const [k, v] of varsEntries) {
-              // экранируем одинарные слэши и кавычки на всякий
-              const safeV = String(v).replace(/\\/g, '\\\\').replace(/\$/g, '\\$');
-              varsCss += `  ${k}: ${safeV};\\n`;
-            }
-            varsCss += '}';
-            try {
-              await logWindow!.webContents.insertCSS(varsCss);
-              logStore.push('[DEBUG] CSS variables synced to logWindow');
-            } catch (err) {
-              console.warn('[logWindow] failed to insert CSS vars:', (err as Error).message);
-              logStore.push(`[WARN] failed to insert CSS vars: ${(err as Error).message}`);
-            }
-            // повторно отправим тему (чтобы переменные применились)
-            logWindow?.webContents.send('set-theme', currentThemeIsDark);
-          } else {
-            logStore.push('[DEBUG] No CSS variables found in mainWindow to sync');
-          }
-        } else {
-          logStore.push('[DEBUG] mainWindow not available for CSS var sync');
-        }
-      } catch (err) {
-        console.warn('[logWindow] error syncing CSS vars from mainWindow:', (err as Error).message);
-        logStore.push(`[WARN] error syncing CSS vars: ${(err as Error).message}`);
-      }
-
-      // 4) Диагностика и fallback (как страховка)
+      // 4) Диагностика и fallback
       const diag = await logWindow!.webContents.executeJavaScript(`
         (function(){
           try {
@@ -293,8 +367,8 @@ function createLogWindow() {
           .btn { padding:8px 12px; border-radius:8px; border:1px solid var(--border); cursor:pointer; background:var(--panel) !important; color:var(--text) !important; }
           .btn.primary { background:var(--btn-bg) !important; color:var(--btn-text) !important; border:none !important; }
           .filters { display:flex; gap:8px; align-items:center; }
-          .log { flex:1; width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-family:monospace; font-size:13px; overflow:auto; white-space:pre-wrap; }
-          .search { padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--panel); }
+          .log { flex:1; width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-family:monospace; font-size:13px; overflow:auto; white-space:pre; }
+          .search { padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); }
           .small { color:var(--muted); font-size:12px; }
         `;
         try {
@@ -470,23 +544,39 @@ ipcMain.handle('cancel-merge', async () => {
 
 /* Основной обработчик объединения */
 ipcMain.handle('merge-pdfs', async (_event, { mainFolder, insertFolder, outputFolder, recursiveMain, recursiveInsert }: any) => {
-  const summary = { processed: 0, skipped: 0, errors: [] as string[], log: [] as string[], total: 0, canceled: false as boolean };
+  const summary = {
+    processed: 0,
+    skipped: 0,
+    errors: [] as string[],
+    log: [] as string[],
+    total: 0,
+    canceled: false as boolean
+  };
+
   try {
     if (!mainFolder || !insertFolder || !outputFolder) throw new Error('Не указаны папки');
     await fs.ensureDir(outputFolder);
 
-    // сбрасываем флаг отмены перед началом
     mergeCancelRequested = false;
 
-    const insertDict = await buildDict(insertFolder, !!recursiveInsert, (full) => full.toLowerCase().endsWith('.pdf'), extractNotificationCode);
-    const zepbDict = await buildDict(mainFolder, !!recursiveMain, (full, name) => full.toLowerCase().endsWith('.pdf') && name.toLowerCase().includes('зэпб'), extractZepbCode);
+    const insertDict = await buildDict(
+      insertFolder,
+      !!recursiveInsert,
+      (full) => full.toLowerCase().endsWith('.pdf'),
+      extractNotificationCode
+    );
+    const zepbDict = await buildDict(
+      mainFolder,
+      !!recursiveMain,
+      (full, name) => full.toLowerCase().endsWith('.pdf') && name.toLowerCase().includes('зэпб'),
+      extractZepbCode
+    );
 
     const keys = Object.keys(insertDict);
     summary.total = keys.length;
     const processedNames: string[] = [];
 
     for (let i = 0; i < keys.length; i++) {
-      // проверяем флаг отмены в начале каждой итерации
       if (mergeCancelRequested) {
         const cancelMsg = 'Операция объединения отменена пользователем';
         summary.log.push(cancelMsg);
@@ -532,20 +622,34 @@ ipcMain.handle('merge-pdfs', async (_event, { mainFolder, insertFolder, outputFo
         const [notifBuf, zepbBuf] = await Promise.all([fsp.readFile(notifPath), fsp.readFile(zepbPath)]);
         const [notifDoc, zepbDoc] = await Promise.all([PDFDocument.load(notifBuf), PDFDocument.load(zepbBuf)]);
         const merged = await PDFDocument.create();
+
         const notifPages = await merged.copyPages(notifDoc, notifDoc.getPageIndices());
         notifPages.forEach(p => merged.addPage(p));
         const zepbPages = await merged.copyPages(zepbDoc, zepbDoc.getPageIndices());
         zepbPages.forEach(p => merged.addPage(p));
-        const base = path.basename(zepbPath, '.pdf').replace(/\s*\(с увед.*?\)\s*$/i, '').replace(/\s*с увед.*?$/i, '');
+
+        const base = path.basename(zepbPath, '.pdf')
+          .replace(/\s*\(с увед.*?\)\s*$/i, '')
+          .replace(/\s*с увед.*?$/i, '');
         const outName = `${base} (с увед).pdf`;
         const outPath = path.join(outputFolder, outName);
         const mergedBuf = await merged.save();
         await fsp.writeFile(outPath, mergedBuf);
+
         summary.processed++;
         processedNames.push(outName);
+
         const msg = `Объединено: ${outName}`;
         summary.log.push(msg);
-        mainWindow?.webContents.send('merge-progress', { processed: summary.processed, skipped: summary.skipped, total: summary.total, current: index, code, outputFilename: outName, message: msg });
+        mainWindow?.webContents.send('merge-progress', {
+            processed: summary.processed,
+            skipped: summary.skipped,
+            total: summary.total,
+            current: index,
+            code,
+            outputFilename: outName,
+            message: msg
+        });
         logStore.push(msg);
         if (logWindow) logWindow.webContents.send('log-append', msg);
       } catch (err) {
@@ -553,32 +657,47 @@ ipcMain.handle('merge-pdfs', async (_event, { mainFolder, insertFolder, outputFo
         summary.errors.push(em);
         summary.log.push(em);
         summary.skipped++;
-        mainWindow?.webContents.send('merge-progress', { processed: summary.processed, skipped: summary.skipped, total: summary.total, current: index, code, message: em });
+        mainWindow?.webContents.send('merge-progress', {
+          processed: summary.processed,
+          skipped: summary.skipped,
+          total: summary.total,
+          current: index,
+          code,
+          message: em
+        });
         logStore.push(em);
         if (logWindow) logWindow.webContents.send('log-append', em);
       }
     }
 
-    // если операция была отменена, всё равно создаём реестр для уже обработанных файлов (опционально).
-    const registryName = await createRegistryDocx(outputFolder, processedNames);
-    if (registryName) {
-      summary.log.push(`Создан реестр: ${registryName}`);
-      logStore.push(`Создан реестр: ${registryName}`);
-      if (logWindow) logWindow.webContents.send('log-append', `Создан реестр: ${registryName}`);
+    // Формируем реестр (даже если было отменено — для обработанных файлов)
+    let registryPath: string | null = null;
+    try {
+      registryPath = await createRegisterDocx(outputFolder, processedNames);
+      if (registryPath) {
+        summary.log.push(`Создан реестр: ${registryPath}`);
+        logStore.push(`Создан реестр: ${registryPath}`);
+        if (logWindow) logWindow.webContents.send('log-append', `Создан реестр: ${registryPath}`);
+      }
+    } catch (e) {
+      const em = `Ошибка формирования реестра: ${(e as Error).message}`;
+      summary.log.push(em);
+      logStore.push(em);
+      if (logWindow) logWindow.webContents.send('log-append', em);
     }
 
-    const finishedMsg = {
+    const finishedPayload = {
       processed: summary.processed,
       skipped: summary.skipped,
       total: summary.total,
       errors: summary.errors,
       log: summary.log,
-      registry: registryName || null,
+      registry: registryPath,
       canceled: summary.canceled
     };
 
-    mainWindow?.webContents.send('merge-complete', finishedMsg);
-    if (logWindow) logWindow.webContents.send('merge-complete', finishedMsg);
+    mainWindow?.webContents.send('merge-complete', finishedPayload);
+    if (logWindow) logWindow.webContents.send('merge-complete', finishedPayload);
 
     return summary;
   } catch (err) {
@@ -586,8 +705,19 @@ ipcMain.handle('merge-pdfs', async (_event, { mainFolder, insertFolder, outputFo
     summary.errors.push(em);
     summary.log.push(em);
     logStore.push(em);
-    mainWindow?.webContents.send('merge-complete', { processed: summary.processed, skipped: summary.skipped, total: summary.total, errors: summary.errors, log: summary.log, registry: null, canceled: false });
-    if (logWindow) logWindow.webContents.send('merge-complete', { processed: summary.processed, skipped: summary.skipped, total: summary.total, errors: summary.errors, log: summary.log, registry: null, canceled: false });
+
+    const failedPayload = {
+      processed: summary.processed,
+      skipped: summary.skipped,
+      total: summary.total,
+      errors: summary.errors,
+      log: summary.log,
+      registry: null,
+      canceled: summary.canceled
+    };
+
+    mainWindow?.webContents.send('merge-complete', failedPayload);
+    if (logWindow) logWindow.webContents.send('merge-complete', failedPayload);
     return summary;
   }
 });
