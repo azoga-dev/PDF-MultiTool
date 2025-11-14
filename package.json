@@ -57,6 +57,13 @@
       "src/logWindow.html",
       "assets/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "vendor/ghostscript/",
+        "to": "ghostscript",
+        "filter": ["**/*"]
+      }
+    ],
     "win": {
       "target": [
         "nsis"

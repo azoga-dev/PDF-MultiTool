@@ -272,6 +272,31 @@ ipcMain.handle('read-file-buffer', async (_e, filePath: string) => {
 // Замените существующую функцию createLogWindow на этот вариант.
 // Он копирует styles.css, вставляет его, затем синхронизирует CSS-переменные
 // из mainWindow в logWindow, и только в крайнем случае применяет fallback CSS.
+// Добавить один раз вверху файла (рядом с утилитами)
+    async function findGhostscript(): Promise<string | null> {
+      // 1) Сначала пробуем упакованную версию в resources/ghostscript/bin/gswin64c.exe
+      try {
+        const bundled = path.join(process.resourcesPath, 'ghostscript', 'bin', 'gswin64c.exe');
+        if (await fs.pathExists(bundled)) {
+          try {
+            await execFileAsync(bundled, ['--version']);
+            return bundled; // встроенный GS
+          } catch (e) {
+            console.warn('[GS] bundled gs failed test:', (e as Error).message);
+          }
+        }
+      } catch {}
+
+      // 2) Потом пробуем системный PATH
+      const candidates = ['gswin64c', 'gswin32c', 'gs'];
+      for (const c of candidates) {
+        try {
+          await execFileAsync(c, ['--version']);
+          return c; // системный GS из PATH
+        } catch { /* ignore */ }
+      }
+      return null;
+    }
 
 import { pathToFileURL } from 'url'; // убедитесь, что импорт есть вверху файла
 
@@ -410,6 +435,14 @@ ipcMain.handle('path-is-directory', async (_e, p: string) => {
 // IPC: сжатие списка файлов (drag&drop)
 ipcMain.handle('compress-files', async (_e, { files, outputFolder, quality = 30 }: { files: string[]; outputFolder: string; quality?: number }) => {
   const result: { processed: number; total: number; log: string[]; used?: string; files?: any[] } = { processed: 0, total: 0, log: [], used: 'none', files: [] };
+  const gsCmd = await findGhostscript();
+  if (gsCmd) {
+    result.used = `ghostscript (${gsCmd.includes('resources') ? 'bundled' : 'system'})`;
+    result.log.push(`[INFO] Используется Ghostscript: ${gsCmd}`);
+  } else {
+    result.used = 'pdf-lib(fallback)';
+    result.log.push('[WARN] Ghostscript не найден, fallback режим.');
+  }
   try {
     if (!files || !Array.isArray(files) || files.length === 0) throw new Error('Нет файлов для сжатия');
     if (!outputFolder) throw new Error('Не указана папка вывода');
@@ -424,14 +457,7 @@ ipcMain.handle('compress-files', async (_e, { files, outputFolder, quality = 30 
     }
     result.total = pdfs.length;
     result.log.push(`Получено ${pdfs.length} PDF для сжатия (drag&drop)`);
-
-    async function findGhostscript(): Promise<string | null> {
-      const candidates = ['gs', 'gswin64c', 'gswin32c'];
-      for (const c of candidates) {
-        try { await execFileAsync(c, ['--version']); return c; } catch { /* ignore */ }
-      }
-      return null;
-    }
+    
     function qualityToPdfSettings(q: number) {
       if (q <= 12) return '/screen';
       if (q <= 25) return '/ebook';
@@ -814,6 +840,14 @@ ipcMain.handle('compress-pdfs', async (_e, { inputFolder, outputFolder, quality 
     const gsCmd = await findGhostscript();
     if (gsCmd) result.used = `ghostscript (${gsCmd})`;
     else result.used = 'pdf-lib(fallback)';
+
+    if (gsCmd) {
+      result.used = `ghostscript (${gsCmd.includes('resources') ? 'bundled' : 'system'})`;
+      result.log.push(`[INFO] Используется Ghostscript: ${gsCmd}`);
+    } else {
+      result.used = 'pdf-lib(fallback)';
+      result.log.push('[WARN] Ghostscript не найден, fallback режим.');
+    }
 
     // цикл по файлам — после каждого файла отправляем событие прогресса
     let index = 0;
