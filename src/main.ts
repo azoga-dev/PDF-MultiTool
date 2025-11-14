@@ -25,7 +25,7 @@ import { randomUUID } from 'crypto';
 // preload -> main: preload пробрасывает invoke/on к main ipc.
 // main отправляет события (merge-progress, merge-complete, log-append) в renderer через webContents.send.
 
-const PREFIXES = ["СК", "УА", "СППК", "СПД", "РВС", "ПУ", "П", "ГЗУ"];
+const PREFIXES = ["СК", "УА", "СППК", "СПД", "РВС", "ПУ", "П", "ГЗУ", "ПТП", "РВС", "ТТП", "НА", "ГЗУ"];
 const CODE_REGEX = new RegExp(`(${PREFIXES.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})-\\d+(?:\\.\\d+)?`, 'i');
 const execFileAsync = promisify(execFile);
 

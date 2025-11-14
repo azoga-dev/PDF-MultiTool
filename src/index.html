@@ -1218,12 +1218,16 @@
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js" integrity="sha512-b0aii6lEFYkk5rZe9a1ODFzHd7OLsYRKiqliS5Jsp09EtvOucdtwKJ3guOIod8ipjhul0opYmPNsEwQeXfeG4g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script>
-  // Настройка pdf.js worker
-  if (window['pdfjsLib']) {
-    window['pdfjsLib'].GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
-  }
+<script type="module">
+  import * as pdfjsLib from './pdf.min.mjs';
+
+  // Назначаем глобально, чтобы renderer.ts мог взять window.pdfjsLib
+  window.pdfjsLib = pdfjsLib;
+
+  // Указываем путь к воркеру (ES module)
+  pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
+
+  console.debug('[pdfjs] module loaded, workerSrc:', pdfjsLib.GlobalWorkerOptions.workerSrc);
 </script>
 <script>
     lucide.createIcons();

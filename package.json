@@ -36,6 +36,7 @@
     "fs-extra": "^11.2.0",
     "pandas-js": "^0.2.4",
     "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.4.394",
     "uuid": "^13.0.0"
   },
   "repository": {

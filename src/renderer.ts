@@ -15,8 +15,6 @@ function ensurePdfJsWorker() {
     console.warn('[pdfjs] init error', e);
   }
 }
-document.addEventListener('DOMContentLoaded', ensurePdfJsWorker);
-
 
 let mainFolder = '';
 let insertFolder = '';
@@ -322,28 +320,83 @@ function updateCompressDnDState(): void {
 }
 
 async function buildPdfThumb(target: CompressDroppedFile): Promise<void> {
+  const pdfjs = (window as any).pdfjsLib;
+  if (!pdfjs) {
+    console.debug('[thumb] pdfjsLib missing for', target.name);
+    return;
+  }
+
   try {
-    const pdfjs = (window as any).pdfjsLib;
-    if (!pdfjs) return;
+    // Проверка workerSrc (если пуст — ставим fake worker, но логируем)
+    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+      console.debug('[thumb] workerSrc empty, attempting fake worker mode');
+      // pdf.js v4 сам поднимет fake worker, но это медленнее.
+    }
+
     const resp = await window.electronAPI.readFileBuffer(target.path);
-    if (!resp.ok || !resp.data) {
-      target.error = resp.error || 'read error';
+    if (!resp.ok || !resp.data || !resp.data.length) {
+      target.error = resp.error || 'empty file';
+      console.debug('[thumb] read error', target.name, target.error);
       return;
     }
+
     const bytes = new Uint8Array(resp.data);
-    const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+    console.debug('[thumb] bytes length', target.name, bytes.length);
+
+    const loadingTask = pdfjs.getDocument({ data: bytes });
+    loadingTask.onProgress = (p: any) => {
+      // можно залогировать прогресс чтения PDF (не обязательно)
+      // console.debug('[thumb] load progress', target.name, p.total, p.loaded);
+    };
+
+    let pdf;
+    try {
+      pdf = await loadingTask.promise;
+    } catch (e) {
+      target.error = 'getDocument failed: ' + (e as Error).message;
+      console.debug('[thumb] getDocument failed', target.name, target.error);
+      return;
+    }
+
+    console.debug('[thumb] numPages', target.name, pdf.numPages);
+
     const page = await pdf.getPage(1);
     const viewport = page.getViewport({ scale: 0.6 });
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    if (!ctx) { target.error = 'canvas error'; return; }
+
+    if (!ctx) {
+      target.error = 'canvas context null';
+      console.debug('[thumb] canvas null', target.name);
+      return;
+    }
+
     canvas.width = viewport.width;
     canvas.height = viewport.height;
+
     await page.render({ canvasContext: ctx, viewport }).promise;
     target.thumb = canvas.toDataURL('image/png');
+    console.debug('[thumb] OK', target.name, 'size', canvas.width, canvas.height);
   } catch (e) {
     target.error = (e as Error).message;
+    console.debug('[thumb] exception', target.name, target.error);
   }
+}
+
+async function regenerateMissingThumbs() {
+  const pdfjs = (window as any).pdfjsLib;
+  if (!pdfjs) {
+    console.debug('[thumb] skip regen: pdfjsLib not ready');
+    return;
+  }
+  let changed = false;
+  for (const f of compressDropped) {
+    if (f.type === 'application/pdf' && !f.thumb && !f.error) {
+      await buildPdfThumb(f);
+      changed = true;
+    }
+  }
+  if (changed) updateCompressDnDState();
 }
 
 async function handleCompressDrop(list: FileList): Promise<void> {
@@ -1242,7 +1295,8 @@ function showMode(modeId: string) {
 
 // Инициализация
 document.addEventListener('DOMContentLoaded', () => {
-  loadTheme(); loadSettings(); checkReady(); updateCompressReady();
+  setTimeout(() => { regenerateMissingThumbs().catch(() => {}); }, 400);
+  ensurePdfJsWorker(); loadTheme(); loadSettings(); checkReady(); updateCompressReady();
   try { layoutCompressResize(); } catch {}
 });
 
