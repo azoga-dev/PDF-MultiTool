@@ -1,7 +1,7 @@
 {
   "name": "pdf-electron-app",
   "productName": "PDFmanager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Application for working with PDF files",
   "main": "./dist/main.js",
   "scripts": {
