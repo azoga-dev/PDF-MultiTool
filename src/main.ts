@@ -80,6 +80,11 @@ async function buildDict(root: string, recursive: boolean, fileFilter: (full: st
     for (const it of items) {
       const full = path.join(dir, it.name);
       if (it.isDirectory()) {
+        if (/^отказы$/i.test(it.name)) {
+          // Можно залогировать (не обязательно)
+          // console.debug('[buildDict] skip folder ОТКАЗЫ:', full);
+          continue;
+        }
         if (recursive) await scan(full);
         continue;
       }
