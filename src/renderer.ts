@@ -3,6 +3,21 @@
 // Также: управление темой и логикой авто-обновлений.
 
 (() => {
+
+function ensurePdfJsWorker() {
+  try {
+    const pdfjs = (window as any).pdfjsLib;
+    if (pdfjs && pdfjs.GlobalWorkerOptions && !pdfjs.GlobalWorkerOptions.workerSrc) {
+      pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
+      console.debug('[pdfjs] workerSrc set');
+    }
+  } catch (e) {
+    console.warn('[pdfjs] init error', e);
+  }
+}
+document.addEventListener('DOMContentLoaded', ensurePdfJsWorker);
+
+
 let mainFolder = '';
 let insertFolder = '';
 let outputFolder = '';
@@ -58,6 +73,9 @@ const themeToggleCheckbox = document.getElementById('theme-toggle-checkbox') as 
 const btnCheckUpdate = document.getElementById('btn-check-update') as HTMLButtonElement;
 const updateStatusSpan = document.getElementById('update-status') as HTMLSpanElement;
 const btnUpdateApp = document.getElementById('btn-update-app') as HTMLButtonElement;
+const settingCompressQuality = document.getElementById('setting-compress-quality') as HTMLSelectElement | null;
+const settingThumbsEnabled   = document.getElementById('setting-thumbnails-enabled') as HTMLInputElement | null;
+const settingThumbSize       = document.getElementById('setting-thumbnail-size') as HTMLSelectElement | null;
 
 /* Feedback controls */
 const feedbackTypeSelect = document.getElementById('feedback-type') as HTMLSelectElement;
@@ -198,6 +216,203 @@ const btnCompressClear = document.getElementById('btn-compress-clear') as HTMLBu
   dropEl.addEventListener('drop', onDrop);
 })();
 
+function getCompressQuality(): number {
+  const v = settingCompressQuality ? parseInt(settingCompressQuality.value, 10) : 30;
+  return Number.isFinite(v) ? v : 30;
+}
+function getThumbsEnabled(): boolean {
+  return settingThumbsEnabled ? !!settingThumbsEnabled.checked : true;
+}
+function getThumbSize(): number {
+  const v = settingThumbSize ? parseInt(settingThumbSize.value, 10) : 128;
+  return Number.isFinite(v) ? v : 128;
+}
+
+// === Drag&Drop миниатюры для compress-drop-hint (Единая версия) ===
+interface CompressDroppedFile {
+  path: string;
+  name: string;
+  type: string;
+  thumb?: string;
+  error?: string;
+}
+
+const cdZone = document.getElementById('compress-drop-hint') as HTMLDivElement | null;
+const cdCount = document.getElementById('compress-drop-count') as HTMLSpanElement | null;
+const cdGallery = document.getElementById('compress-dd-gallery') as HTMLDivElement | null;
+const cdBtnClear = document.getElementById('compress-dd-clear') as HTMLButtonElement | null;
+const cdBtnRun = document.getElementById('compress-dd-run') as HTMLButtonElement | null;
+const cdThumbs = document.getElementById('compress-dd-thumbs') as HTMLInputElement | null;
+const cdSizeSelect = document.getElementById('compress-dd-size') as HTMLSelectElement | null;
+
+let compressDropped: CompressDroppedFile[] = [];
+
+function updateCompressDnDState(): void {
+  if (!cdGallery) return;
+  cdGallery.innerHTML = '';
+  if (compressDropped.length === 0) {
+    cdGallery.classList.add('empty');
+    if (cdCount) cdCount.style.display = 'none';
+    if (cdBtnClear) cdBtnClear.disabled = true;
+    if (cdBtnRun) cdBtnRun.disabled = true;
+    return;
+  }
+  cdGallery.classList.remove('empty');
+  if (cdCount) {
+    cdCount.style.display = 'inline-block';
+    cdCount.textContent = String(compressDropped.length);
+  }
+  if (cdBtnClear) cdBtnClear.disabled = false;
+  if (cdBtnRun) cdBtnRun.disabled = false;
+
+  const size = getThumbSize();
+  const showThumbs = getThumbsEnabled();
+
+  compressDropped.forEach((file, idx) => {
+    const item = document.createElement('div');
+    item.className = 'compress-dd-item';
+    item.style.minHeight = size + 'px';
+
+    const thumb = document.createElement('div');
+    thumb.className = 'compress-dd-thumb';
+    thumb.style.height = size + 'px';
+
+    if (showThumbs) {
+      if (file.thumb) {
+        const img = document.createElement('img');
+        img.src = file.thumb;
+        img.alt = file.name;
+        thumb.appendChild(img);
+      } else {
+        const span = document.createElement('span');
+        span.style.fontSize = '11px';
+        span.style.color = 'var(--text-muted,#666)';
+        span.textContent = file.error
+          ? 'Ошибка'
+          : (file.type === 'application/pdf' ? 'PDF' : 'Нет превью');
+        thumb.appendChild(span);
+      }
+    } else {
+      const span = document.createElement('span');
+      span.style.fontSize = '11px';
+      span.style.color = 'var(--text-muted,#666)';
+      span.textContent = file.name;
+      thumb.appendChild(span);
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'compress-dd-meta';
+    meta.textContent = file.name;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'compress-dd-remove';
+    removeBtn.type = 'button';
+    removeBtn.innerHTML = '×';
+    removeBtn.title = 'Удалить';
+    removeBtn.addEventListener('click', () => {
+      compressDropped.splice(idx, 1);
+      updateCompressDnDState();
+    });
+
+    item.appendChild(thumb);
+    item.appendChild(meta);
+    item.appendChild(removeBtn);
+    cdGallery.appendChild(item);
+  });
+}
+
+async function buildPdfThumb(target: CompressDroppedFile): Promise<void> {
+  try {
+    const pdfjs = (window as any).pdfjsLib;
+    if (!pdfjs) return;
+    const resp = await window.electronAPI.readFileBuffer(target.path);
+    if (!resp.ok || !resp.data) {
+      target.error = resp.error || 'read error';
+      return;
+    }
+    const bytes = new Uint8Array(resp.data);
+    const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 0.6 });
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { target.error = 'canvas error'; return; }
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    target.thumb = canvas.toDataURL('image/png');
+  } catch (e) {
+    target.error = (e as Error).message;
+  }
+}
+
+async function handleCompressDrop(list: FileList): Promise<void> {
+  const newItems: CompressDroppedFile[] = [];
+  for (const f of Array.from(list)) {
+    const anyF: any = f;
+    const fullPath: string | undefined = anyF.path;
+    if (!fullPath) continue;
+    const type = f.type || (f.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : '');
+    newItems.push({ path: fullPath, name: f.name, type });
+  }
+
+  compressDropped.push(...newItems);
+
+  for (const it of newItems) {
+    if (it.type === 'application/pdf') {
+      await buildPdfThumb(it);
+    }
+  }
+  updateCompressDnDState();
+}
+
+function initCompressDropzone(): void {
+  if (!cdZone) return;
+
+  cdZone.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = '.pdf';
+    input.addEventListener('change', () => {
+      if (input.files && input.files.length) void handleCompressDrop(input.files);
+    });
+    input.click();
+  });
+
+  ['dragenter','dragover'].forEach(evt => {
+    cdZone.addEventListener(evt, e => {
+      e.preventDefault();
+      cdZone.classList.add('dragover');
+    });
+  });
+  ['dragleave','dragend'].forEach(evt => {
+    cdZone.addEventListener(evt, e => {
+      e.preventDefault();
+      cdZone.classList.remove('dragover');
+    });
+  });
+  cdZone.addEventListener('drop', e => {
+    e.preventDefault();
+    cdZone.classList.remove('dragover');
+    const files = e.dataTransfer?.files;
+    if (files && files.length) void handleCompressDrop(files);
+  });
+
+  cdBtnClear?.addEventListener('click', () => {
+    compressDropped = [];
+    updateCompressDnDState();
+  });
+
+  // Настройки в Settings управляют галереей
+  settingThumbsEnabled?.addEventListener('change', () => updateCompressDnDState());
+  settingThumbSize?.addEventListener('change', () => updateCompressDnDState());
+
+  updateCompressDnDState();
+}
+
+initCompressDropzone();
+
 function setCompressStatus(state: 'idle' | 'running' | 'cancel' | 'done', text: string) {
   const el = document.getElementById('compress-status-label') as HTMLSpanElement | null;
   if (!el) return;
@@ -325,10 +540,8 @@ function updateCompressReady() {
   /* Запуск сжатия */
   if (btnCompressRun) btnCompressRun.addEventListener('click', async () => {
     // вход — либо выбранная папка, либо droppedFiles
-    if ((!labelCompress || !labelCompress.value || labelCompress.value === 'Не выбрана') && (!droppedFiles || droppedFiles.length === 0)) {
-      const msg = 'Входная папка не выбрана и файлы не переложены';
-      log(msg, 'warning');
-      showPopup('Выберите папку или перетащите файлы для сжатия', 6000);
+    if (!labelCompress || !labelCompress.value || !compressOutputFolder) {
+      showPopup('Выберите входную и выходную папки для сжатия', 5000);
       return;
     }
 
@@ -363,8 +576,8 @@ function updateCompressReady() {
     }
 
     // Всё ок — продолжаем запуск
-    const quality = selectCompressQuality ? parseInt(selectCompressQuality.value, 10) : 30;
-    log(`Запущено сжатие: ${labelCompress?.value || '(перетащенные файлы)'} -> ${compressOutputFolder}, качество ${quality}%`, 'info');
+    const quality = getCompressQuality();
+    log(`Запущено сжатие: ${labelCompress.value} -> ${compressOutputFolder}, качество ${quality}%`, 'info');
 
     isCompressRunning = true;
     setCompressStatus('running', 'Выполняется…');
@@ -420,6 +633,34 @@ function updateCompressReady() {
     showPopup('Настройки сжатия очищены', 4000);
     updateCompressReady();
   });
+
+  // В обработчик "Сжать добавленные" для drag&drop
+cdBtnRun?.addEventListener('click', async () => {
+  if (!compressDropped.length) return;
+  if (!compressOutputFolder) {
+    showPopup('Сначала выберите папку вывода (Сжатие PDF)', 5000);
+    return;
+  }
+  const pdfPaths = compressDropped
+    .filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))
+    .map(f => f.path);
+  if (!pdfPaths.length) { showPopup('Нет PDF для сжатия', 4000); return; }
+
+  const quality = getCompressQuality();
+  log(`Сжатие (drag): ${pdfPaths.length} файлов -> ${compressOutputFolder}, качество ${quality}%`, 'info');
+
+  setBusy(true);
+  try {
+    const res = await window.electronAPI.compressFiles({ files: pdfPaths, outputFolder: compressOutputFolder, quality });
+    res.log?.forEach((m: string) => log(m, m.includes('Ошибка') ? 'error' : 'info'));
+    showPopup(`Сжатие завершено: ${res.processed}/${res.total}`, 6000);
+  } catch (err) {
+    log(`Ошибка сжатия (drag): ${(err as Error).message}`, 'error');
+    showPopup('Ошибка сжатия drag&drop.', 8000);
+  } finally {
+    setBusy(false);
+  }
+});
 
   function layoutCompressResize() {
   try {
@@ -576,19 +817,43 @@ const loadSettings = async () => {
   try {
     const s = await window.electronAPI.loadSettings();
 
-    // Основные папки (как раньше)
+    // --- Основные папки ---
     if (s.mainFolder) {
       mainFolder = s.mainFolder;
       lastSelectedMainFolder = s.mainFolder;
       updateFolderLabel(labelMain, mainFolder);
-      try { zepbDict = await window.electronAPI.buildDict('zepb', mainFolder, !!s.mainRecursive); } catch { zepbDict = {}; }
+      try {
+        zepbDict = await window.electronAPI.buildDict(
+          'zepb',
+          mainFolder,
+          !!s.mainRecursive
+        );
+      } catch {
+        zepbDict = {};
+      }
+    } else {
+      mainFolder = '';
+      updateFolderLabel(labelMain, null);
+      zepbDict = {};
     }
 
     if (s.insertFolder) {
       insertFolder = s.insertFolder;
       lastSelectedInsertFolder = s.insertFolder;
       updateFolderLabel(labelInsert, insertFolder);
-      try { insertDict = await window.electronAPI.buildDict('insert', insertFolder, !!s.insertRecursive); } catch { insertDict = {}; }
+      try {
+        insertDict = await window.electronAPI.buildDict(
+          'insert',
+            insertFolder,
+          !!s.insertRecursive
+        );
+      } catch {
+        insertDict = {};
+      }
+    } else {
+      insertFolder = '';
+      updateFolderLabel(labelInsert, null);
+      insertDict = {};
     }
 
     if (s.outputFolder) {
@@ -597,76 +862,111 @@ const loadSettings = async () => {
       updateFolderLabel(labelOutput, outputFolder);
       const btnOpenOut = document.getElementById('btn-open-output') as HTMLButtonElement | null;
       if (btnOpenOut) btnOpenOut.disabled = false;
+    } else {
+      outputFolder = '';
+      updateFolderLabel(labelOutput, null);
+      const btnOpenOut = document.getElementById('btn-open-output') as HTMLButtonElement | null;
+      if (btnOpenOut) btnOpenOut.disabled = true;
     }
 
-    // Восстановление чекбоксов рекурсивного сканирования
+    // --- Рекурсивные чекбоксы ---
     if (typeof s.mainRecursive === 'boolean') chkMainRecursive.checked = s.mainRecursive;
     if (typeof s.insertRecursive === 'boolean') chkInsertRecursive.checked = s.insertRecursive;
 
-    // --- Новое: восстановление настроек для режима сжатия ---
-    // restore compress input
-    if (s.compressInputFolder) {
+    // --- Папки / состояние режима сжатия (drag&drop + обычный) ---
+    if (s.compressInputFolder && labelCompress) {
+      // Сохраняем и показываем, если есть
       lastSelectedCompress = s.compressInputFolder;
-      if (labelCompress) labelCompress.value = s.compressInputFolder;
+      labelCompress.value = s.compressInputFolder;
     }
-    // restore compress output
+
     if (s.compressOutputFolder) {
       compressOutputFolder = s.compressOutputFolder;
       lastSelectedCompressOutputFolder = s.compressOutputFolder;
       if (labelCompressOutput) {
-        // updateFolderLabel работает с HTMLInputElement
         updateFolderLabel(labelCompressOutput, compressOutputFolder);
-      } else {
-        // если элемент отсутствует — попытка прямой запись безопасно (используем пустую строку вместо null)
-        try { (document.getElementById('label-compress-output') as HTMLInputElement).value = compressOutputFolder ?? ''; } catch {}
       }
-      const btnCompOut = document.getElementById('btn-compress-output') as HTMLButtonElement | null;
-      if (btnCompOut) btnCompOut.disabled = false;
+    } else {
+      compressOutputFolder = null;
+      if (labelCompressOutput) updateFolderLabel(labelCompressOutput, null);
     }
 
-    // Восстановление выбранного качества (если сохранено)
-    try {
-      if (s.compressQuality && selectCompressQuality) {
-        selectCompressQuality.value = String(s.compressQuality);
-      }
-    } catch { /* ignore */ }
+    // --- Настройки качества (перенесены в Settings) ---
+    if (s.compressQuality && settingCompressQuality) {
+      const q = parseInt(String(s.compressQuality), 10);
+      if (!isNaN(q)) settingCompressQuality.value = String(q);
+    }
 
-    // Обновляем UI/статусы
+    // --- Настройки миниатюр (перенесены в Settings) ---
+    if (typeof s.thumbnailsEnabled === 'boolean' && settingThumbsEnabled) {
+      settingThumbsEnabled.checked = s.thumbnailsEnabled;
+    }
+    if (s.thumbnailSize && settingThumbSize) {
+      const ts = parseInt(String(s.thumbnailSize), 10);
+      if (!isNaN(ts)) settingThumbSize.value = String(ts);
+    }
+
+    // --- Обновление UI ---
     updateStats();
     checkReady();
+    updateCompressReady();      // активность кнопки "Начать сжатие"
+    updateCompressDnDState();   // перерисовка галереи с учетом настроек
 
-    // Обновляем состояние кнопки сжатия
-    updateCompressReady();
   } catch (err) {
     console.error('Ошибка загрузки настроек', err);
   }
 };
 
 const saveSettings = async () => {
-  // Собираем настройки для сохранения — включаем поля для compress
-  const s: any = {
+  // Собираем объект настроек для записи
+  const settingsToSave: any = {
+    // Основные папки
     mainFolder,
     insertFolder,
     outputFolder,
+
+    // Флаги рекурсии
     mainRecursive: chkMainRecursive.checked,
     insertRecursive: chkInsertRecursive.checked,
+
+    // Последние выбранные пути
     lastSelectedMainFolder,
     lastSelectedInsertFolder,
     lastSelectedOutputFolder,
-    // поля для режима сжатия
-    compressInputFolder: lastSelectedCompress ?? null,
+
+    // Папки режима сжатия
+    compressInputFolder: (labelCompress && labelCompress.value && labelCompress.value !== 'Не выбрана')
+      ? labelCompress.value
+      : (lastSelectedCompress ?? null),
     compressOutputFolder: compressOutputFolder ?? null,
+    lastSelectedCompress: lastSelectedCompress ?? null,
     lastSelectedCompressOutputFolder: lastSelectedCompressOutputFolder ?? null,
-    // сохраняем выбранное качество как число, если есть
-    compressQuality: selectCompressQuality ? parseInt(selectCompressQuality.value, 10) : undefined
+
+    // Настройки качества (из Settings)
+    compressQuality: settingCompressQuality
+      ? parseInt(settingCompressQuality.value, 10)
+      : undefined,
+
+    // Миниатюры drag&drop
+    thumbnailsEnabled: settingThumbsEnabled
+      ? !!settingThumbsEnabled.checked
+      : undefined,
+    thumbnailSize: settingThumbSize
+      ? parseInt(settingThumbSize.value, 10)
+      : undefined,
   };
 
   try {
-    await window.electronAPI.saveSettings(s);
+    await window.electronAPI.saveSettings(settingsToSave);
   } catch (err) {
     console.error('Ошибка сохранения настроек', err);
   }
 };
+
+// Привязка авто-сохранения при изменении настроек (если ещё не сделано)
+settingCompressQuality?.addEventListener('change', () => { saveSettings().catch(() => {}); });
+settingThumbsEnabled?.addEventListener('change', () => { updateCompressDnDState(); saveSettings().catch(() => {}); });
+settingThumbSize?.addEventListener('change', () => { updateCompressDnDState(); saveSettings().catch(() => {}); });
 
 /* Тема: загрузка и переключение, сохраняется в localStorage */
 const loadTheme = () => {

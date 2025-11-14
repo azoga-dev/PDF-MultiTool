@@ -259,6 +259,16 @@ ipcMain.on('theme-changed', (_e, isDark: boolean) => {
   }
 });
 
+// IPC: вернуть содержимое файла как Buffer (для pdf.js в renderer)
+ipcMain.handle('read-file-buffer', async (_e, filePath: string) => {
+  try {
+    const buf = await fsp.readFile(filePath);
+    return { ok: true, data: Array.from(buf) };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+});
+
 // Замените существующую функцию createLogWindow на этот вариант.
 // Он копирует styles.css, вставляет его, затем синхронизирует CSS-переменные
 // из mainWindow в logWindow, и только в крайнем случае применяет fallback CSS.

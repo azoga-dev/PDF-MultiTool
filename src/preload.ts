@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Сжатие PDF (main)
   compressPDFs: (opts: { inputFolder: string, outputFolder: string, quality?: number }) => ipcRenderer.invoke('compress-pdfs', opts),
   compressFiles: (opts: { files: string[]; outputFolder: string; quality?: number }) => ipcRenderer.invoke('compress-files', opts),
+  readFileBuffer: (filePath: string) => ipcRenderer.invoke('read-file-buffer', filePath),
   
   // Проверка — является ли путь директорией
   pathIsDirectory: (p: string) => ipcRenderer.invoke('path-is-directory', p),
@@ -76,7 +77,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateError: (cb: (event: any, error: string) => void) => { ipcRenderer.on('update-error', cb); return () => ipcRenderer.removeListener('update-error', cb); },
   onUpdateDownloadProgress: (cb: (event: any, percent: number) => void) => { ipcRenderer.on('update-download-progress', cb); return () => ipcRenderer.removeAllListeners('update-download-progress'); },
   onUpdateDownloaded: (cb: (event: any, version: string) => void) => { ipcRenderer.on('update-downloaded', cb); return () => ipcRenderer.removeAllListeners('update-downloaded'); },
-
+  
   // Прогресс и завершение объединения
   onMergeProgress: (cb: (event: any, payload: any) => void) => { ipcRenderer.on('merge-progress', (_e, payload) => cb(null, payload)); return () => ipcRenderer.removeAllListeners('merge-progress'); },
   onMergeComplete: (cb: (event: any, payload: any) => void) => { ipcRenderer.on('merge-complete', (_e, payload) => cb(null, payload)); return () => ipcRenderer.removeAllListeners('merge-complete'); }

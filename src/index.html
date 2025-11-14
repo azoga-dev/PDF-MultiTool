@@ -750,6 +750,39 @@
         .hide-scrollbar::-webkit-scrollbar {
         display: none;
         }
+        .compress-dd-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:8px; }
+        .compress-dd-opt { display:flex; gap:6px; align-items:center; font-size:12px; }
+        .compress-dd-gallery {
+        display:grid;
+        grid-template-columns:repeat(auto-fill,minmax(128px,1fr));
+        gap:10px;
+        min-height:100px;
+        padding:6px 4px;
+        border:1px solid var(--sidebar-border,#ddd);
+        border-radius:10px;
+        background:var(--bg-color,#fff);
+        position:relative;
+        margin-top:6px;
+        }
+        .compress-dd-gallery.empty::before {
+        content:'Нет добавленных файлов';
+        position:absolute; inset:0;
+        display:flex; align-items:center; justify-content:center;
+        font-size:12px; color:var(--text-muted,#6b7280);
+        pointer-events:none;
+        }
+        .compress-dd-item { position:relative; display:flex; flex-direction:column; border:1px solid var(--sidebar-border,#ddd); border-radius:8px; background:#fff; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.08); transition:box-shadow .15s; }
+        .compress-dd-item:hover { box-shadow:0 2px 6px rgba(0,0,0,.15); }
+        .compress-dd-thumb { flex:1; display:flex; align-items:center; justify-content:center; background:#fafafa; overflow:hidden; }
+        .compress-dd-thumb img { width:100%; height:100%; object-fit:contain; display:block; }
+        .compress-dd-meta { font-size:10.5px; padding:3px 5px; line-height:1.25; word-break:break-all; background:#fff; }
+        .compress-dd-remove { position:absolute; top:4px; right:4px; width:20px; height:20px; border:none; background:rgba(0,0,0,.6); color:#fff; border-radius:50%; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; transition:background .15s; }
+        .compress-dd-remove:hover { background:rgba(220,38,38,.85); }
+
+        html[data-theme="dark"] .compress-dd-gallery { background:#111827; border-color:#374151; }
+        html[data-theme="dark"] .compress-dd-item { background:#1f2937; border-color:#374151; }
+        html[data-theme="dark"] .compress-dd-thumb { background:#1f2937; }
+        html[data-theme="dark"] .compress-dd-meta { background:#1f2937; color:#e5e7eb; }
     </style>
     <style id="compress-ui-extra">
     .compress-progress-header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:8px; }
@@ -825,8 +858,10 @@
     }
     </style>
     <style id="compress-dropzone-styles">
+    #compress-drop-wrapper { width: 100%; }
     #compress-drop-hint {
         margin-top: 8px;
+        width: 100%;
         padding: 10px;
         border-radius: 8px;
         border: 1px dashed var(--sidebar-border);
@@ -1050,92 +1085,127 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="settings-item">
+                    <div class="settings-title">Сжатие PDF</div>
+
+                    <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
+                    <label style="display:flex; gap:8px; align-items:center;">
+                        <span style="min-width:96px;">Качество:</span>
+                        <select id="setting-compress-quality" class="folder-input" style="width:160px; padding:6px;">
+                        <option value="10">Очень слабое (≈10%)</option>
+                        <option value="20">Низкое (≈20%)</option>
+                        <option value="30" selected>Среднее (≈30%)</option>
+                        <option value="40">Высокое (≈40%)</option>
+                        <option value="50">Макс. качество (≈50%)</option>
+                        </select>
+                    </label>
+
+                    <label style="display:flex; gap:8px; align-items:center;">
+                        <input type="checkbox" id="setting-thumbnails-enabled" checked>
+                        <span>Показывать миниатюры в Drag&Drop</span>
+                    </label>
+
+                    <label style="display:flex; gap:8px; align-items:center;">
+                        <span>Размер миниатюр:</span>
+                        <select id="setting-thumbnail-size" class="folder-input" style="width:140px; padding:6px;">
+                        <option value="96">Мал</option>
+                        <option value="128" selected>Средний</option>
+                        <option value="160">Крупный</option>
+                        </select>
+                    </label>
+                    </div>
+                </div>
             </div>
 
             <!-- Обновлённый фрагмент compress-content: все контролы сжатиия обёрнуты в #compress-controls -->
-<div id="compress-content" class="content-section" style="display: none;">
-  <div class="content-header">Сжатие PDF</div>
+    <div id="compress-content" class="content-section" style="display: none;">
+    <div class="content-header">Сжатие PDF</div>
 
-  <div id="compress-controls">
-    <div class="folder-section">
-      <div class="folder-group">
-        <label class="folder-label">Папка с PDF (вход)</label>
-        <div class="folder-input-container">
-          <input type="text" id="label-compress" value="Не выбрана" readonly class="folder-input">
-          <button id="btn-compress" class="btn btn-primary">Выбрать</button>
+    <div id="compress-controls">
+
+        <!-- Drag&Drop ОБЕРНУТ в .folder-group и стоит ПЕРВЫМ -->
+        <div class="folder-group">
+        <label class="folder-label">Перетащите файлы для сжатия</label>
+        <div id="compress-drop-wrapper">
+            <div id="compress-drop-hint" title="Перетащите PDF файлы сюда">
+            <span style="opacity:0.9;">Перетащите PDF файлы для сжатия</span>
+            <small style="margin-left:auto;">Или нажмите</small>
+            <span id="compress-drop-count" style="display:none;margin-left:8px;">0</span>
+            </div>
+
+            <!-- Из toolbar оставляем только действия; настройки миниатюр убраны -->
+            <div class="compress-dd-toolbar" style="margin-top:8px;">
+            <button id="compress-dd-clear" class="btn btn-outline" disabled>Очистить</button>
+            <button id="compress-dd-run" class="btn btn-secondary" disabled>Сжать добавленные</button>
+            </div>
+
+            <div id="compress-dd-gallery" class="compress-dd-gallery empty"></div>
+        </div>
         </div>
 
-        <div style="margin-top:0.75rem; display:flex; align-items:center; gap:8px;">
-          <label for="compress-quality" style="margin:0; font-size:13px; color:var(--text-color);">Качество:</label>
-          <select id="compress-quality" class="folder-input" style="width:140px; padding:6px;">
-            <option value="10">Очень слабое (≈10%)</option>
-            <option value="20">Низкое (≈20%)</option>
-            <option value="30" selected>Среднее (≈30%)</option>
-            <option value="40">Высокое (≈40%)</option>
-            <option value="50">Макс. качество (≈50%)</option>
-          </select>
-          <div style="flex:1"></div>
+        <!-- Далее обычные группы выбора папок -->
+        <div class="folder-section">
+        <div class="folder-group">
+            <label class="folder-label">Папка с PDF (вход)</label>
+            <div class="folder-input-container">
+            <input type="text" id="label-compress" value="Не выбрана" readonly class="folder-input">
+            <button id="btn-compress" class="btn btn-primary">Выбрать</button>
+            </div>
         </div>
-      </div>
 
-      <div class="folder-group">
-        <label class="folder-label">Папка результатов (выход)</label>
-        <div class="folder-input-container">
-          <input type="text" id="label-compress-output" value="Не выбрана" readonly class="folder-input">
-          <button id="btn-compress-output" class="btn btn-primary">Выбрать</button>
+        <div class="folder-group">
+            <label class="folder-label">Папка результатов (выход)</label>
+            <div class="folder-input-container">
+            <input type="text" id="label-compress-output" value="Не выбрана" readonly class="folder-input">
+            <button id="btn-compress-output" class="btn btn-primary">Выбрать</button>
+            </div>
         </div>
-      </div>
-
-      <div id="compress-drop-hint" title="Перетащите PDF файлы сюда">
-        <span style="opacity:0.9;">Перетащите PDF файлы для сжатия</span>
-        <small style="margin-left:auto;">Или выберите папку</small>
-        <span id="compress-drop-count" style="display:none;margin-left:8px;">0</span>
-      </div>
-    </div>
-
-    <div class="compress-progress-block">
-      <div class="compress-progress-header">
-        <div style="font-size:13px;">Прогресс сжатия</div>
-        <div class="compress-progress-meta">
-          <span id="compress-status-label" class="status-pill status--idle">Ожидание</span>
-          <span id="compress-progress-percent" style="min-width:32px; text-align:right; color:var(--text-color);">0%</span>
         </div>
-      </div>
-      <div class="compress-progress-bar">
-        <div id="compress-progress-fill"></div>
-      </div>
-    </div>
 
-    <div id="compress-table-wrap">
-      <table id="compress-table hide-scrollbar">
-        <colgroup>
-          <col style="width:56px" />
-          <col style="width:auto" />
-          <col style="width:120px" />
-          <col style="width:120px" />
-          <col style="width:90px" />
-          <col style="width:160px" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Файл</th>
-            <th>Исходный</th>
-            <th>Результат</th>
-            <th>Изм., %</th>
-            <th>Статус</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
+        <div class="compress-progress-block">
+        <div class="compress-progress-header">
+            <div style="font-size:13px;">Прогресс сжатия</div>
+            <div class="compress-progress-meta">
+            <span id="compress-status-label" class="status-pill status--idle">Ожидание</span>
+            <span id="compress-progress-percent" style="min-width:32px; text-align:right; color:var(--text-color);">0%</span>
+            </div>
+        </div>
+        <div class="compress-progress-bar">
+            <div id="compress-progress-fill"></div>
+        </div>
+        </div>
 
-    <div class="controls-row" style="margin-top:14px;">
-      <button id="btn-compress-run" class="btn btn-secondary" disabled>Начать сжатие</button>
-      <button id="btn-compress-clear" class="btn btn-outline" title="Очистить настройки сжатия">Очистить</button>
+        <div id="compress-table-wrap">
+        <table id="compress-table" class="hide-scrollbar">
+            <colgroup>
+            <col style="width:56px" />
+            <col style="width:auto" />
+            <col style="width:120px" />
+            <col style="width:120px" />
+            <col style="width:90px" />
+            <col style="width:160px" />
+            </colgroup>
+            <thead>
+            <tr>
+                <th>#</th>
+                <th>Файл</th>
+                <th>Исходный</th>
+                <th>Результат</th>
+                <th>Изм., %</th>
+                <th>Статус</th>
+            </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        </div>
+
+        <div class="controls-row" style="margin-top:14px;">
+        <button id="btn-compress-run" class="btn btn-secondary" disabled>Начать сжатие</button>
+        <button id="btn-compress-clear" class="btn btn-outline" title="Очистить настройки сжатия">Очистить</button>
+        </div>
     </div>
-  </div>
-</div>
+    </div>
     <!-- Всплывающее уведомление об обновлении (по умолчанию скрыто) -->
     <div id="update-notification" class="update-notification hidden">
   <div class="update-notification-content">
@@ -1148,9 +1218,16 @@
   </div>
 </div>
 
-    <script>
-        lucide.createIcons();
-    </script>
-    <script src="./renderer.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js" integrity="sha512-b0aii6lEFYkk5rZe9a1ODFzHd7OLsYRKiqliS5Jsp09EtvOucdtwKJ3guOIod8ipjhul0opYmPNsEwQeXfeG4g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+  // Настройка pdf.js worker
+  if (window['pdfjsLib']) {
+    window['pdfjsLib'].GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
+  }
+</script>
+<script>
+    lucide.createIcons();
+</script>
+<script src="./renderer.js"></script>
 </body>
 </html>

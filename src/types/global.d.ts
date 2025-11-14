@@ -27,7 +27,14 @@ declare global {
       countFilesInFolder: (folderPath: string) => Promise<number>;
       openFolder: (folderPath: string) => Promise<boolean>;
       compressPDFs: (options: { inputFolder: string; outputFolder: string; quality?: number }) => Promise<{ processed: number; total: number; log: string[]; used?: string }>;
-      compressFiles: (options: { files: string[]; outputFolder: string; quality?: number }) => Promise<{ processed: number; total: number; log: string[]; used?: string }>;
+      compressFiles: (opts: { files: string[]; outputFolder: string; quality?: number }) => Promise<{
+        processed: number;
+        total: number;
+        log: string[];
+        used?: string;
+        files?: Array<{ name: string; inSize?: number; outSize?: number; ok: boolean; error?: string; notes?: string }>;
+      }>;
+      readFileBuffer: (filePath: string) => Promise<{ ok: boolean; data?: number[]; error?: string }>;
       pathIsDirectory: (p: string) => Promise<boolean>;
       onCompressProgress: (cb: (event: any, payload: { index: number; total: number; name: string; inSize?: number; outSize?: number; ok: boolean; error?: string | null; notes?: string | null }) => void) => () => void;
       onCompressComplete: (cb: (event: any, payload: { processed: number; total: number; log: string[] }) => void) => () => void;
@@ -56,6 +63,7 @@ declare global {
       onMergeProgress: (cb: (event: any, payload: any) => void) => () => void;
       onMergeComplete: (cb: (event: any, payload: any) => void) => () => void;
     };
+    pdfjsLib?: any;
   }
 }
 
