@@ -23,21 +23,58 @@ declare global {
       }>;
       cancelMerge: () => Promise<boolean>;
       setTheme: (isDark: boolean) => void;
-      buildDict: (type: 'zepb' | 'insert', folderPath: string, recursive: boolean) => Promise<Record<string, string>>;
+      buildDict: (
+        type: 'zepb' | 'insert',
+        folderPath: string,
+        recursive: boolean
+      ) => Promise<Record<string, string>>;
       countFilesInFolder: (folderPath: string) => Promise<number>;
       openFolder: (folderPath: string) => Promise<boolean>;
-      compressPDFs: (options: { inputFolder: string; outputFolder: string; quality?: number }) => Promise<{ processed: number; total: number; log: string[]; used?: string }>;
-      compressFiles: (opts: { files: string[]; outputFolder: string; quality?: number }) => Promise<{
+      compressPDFs: (options: {
+        inputFolder: string;
+        outputFolder: string;
+        quality?: number;
+      }) => Promise<{ processed: number; total: number; log: string[]; used?: string }>;
+      compressFiles: (opts: {
+        files: string[];
+        outputFolder: string;
+        quality?: number;
+      }) => Promise<{
         processed: number;
         total: number;
         log: string[];
         used?: string;
-        files?: Array<{ name: string; inSize?: number; outSize?: number; ok: boolean; error?: string; notes?: string }>;
+        files?: Array<{
+          name: string;
+          inSize?: number;
+          outSize?: number;
+          ok: boolean;
+          error?: string;
+          notes?: string;
+        }>;
       }>;
-      readFileBuffer: (filePath: string) => Promise<{ ok: boolean; data?: number[]; error?: string }>;
+      readFileBuffer: (
+        filePath: string
+      ) => Promise<{ ok: boolean; data?: number[]; error?: string }>;
       pathIsDirectory: (p: string) => Promise<boolean>;
-      onCompressProgress: (cb: (event: any, payload: { index: number; total: number; name: string; inSize?: number; outSize?: number; ok: boolean; error?: string | null; notes?: string | null }) => void) => () => void;
-      onCompressComplete: (cb: (event: any, payload: { processed: number; total: number; log: string[] }) => void) => () => void;
+      onCompressProgress: (
+        cb: (
+          event: any,
+          payload: {
+            index: number;
+            total: number;
+            name: string;
+            inSize?: number;
+            outSize?: number;
+            ok: boolean;
+            error?: string | null;
+            notes?: string | null;
+          }
+        ) => void
+      ) => () => void;
+      onCompressComplete: (
+        cb: (event: any, payload: { processed: number; total: number; log: string[] }) => void
+      ) => () => void;
       cancelCompress: () => Promise<boolean>;
       getAppInfo: () => Promise<{ version: string; platform: string; arch: string }>;
       openExternalUrl: (url: string) => Promise<void>;
@@ -50,7 +87,9 @@ declare global {
       // Логирование: отправка и управление окном логов
       appendLog: (line: string) => void;
       openLogWindow: () => Promise<boolean>;
-      exportLog: (suggestedName?: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
+      exportLog: (
+        suggestedName?: string
+      ) => Promise<{ ok: boolean; path?: string; error?: string }>;
       onLogContent: (cb: (event: any, content: string) => void) => () => void;
       onLogAppend: (cb: (event: any, line: string) => void) => () => void;
       onSetTheme: (cb: (event: any, isDark: boolean) => void) => () => void;

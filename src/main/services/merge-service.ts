@@ -41,7 +41,7 @@ const cmToTwip = (cm: number) => Math.round(cm * 567);
 /**
  * Форматировать число с ведущим нулем
  */
-const pad2 = (n: number) => (n < 10 ? '0' + n : '' + n);
+const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
 /**
  * Форматировать дату и время
@@ -52,8 +52,7 @@ const formatDateTime = (d: Date) =>
 /**
  * Форматировать дату
  */
-const formatDate = (d: Date) =>
-  `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+const formatDate = (d: Date) => `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
 
 /**
  * Извлечь код уведомления из имени файла или папки
@@ -61,16 +60,16 @@ const formatDate = (d: Date) =>
 export function extractNotificationCode(fullPath: string): string | null {
   const filename = path.basename(fullPath);
   const foldername = path.basename(path.dirname(fullPath));
-  
+
   const m = filename.match(CODE_REGEX);
   if (m) return m[0].toUpperCase();
-  
+
   const folderPrefix = PREFIXES.find(p => foldername.toUpperCase().includes(p));
   if (folderPrefix) {
     const nm = filename.match(/\d+(?:\.\d+)?/);
     if (nm) return `${folderPrefix}-${nm[0]}`.toUpperCase();
   }
-  
+
   return null;
 }
 
@@ -102,7 +101,7 @@ export async function buildDict(
   extractCode: (nameOrPath: string) => string | null
 ): Promise<Record<string, string>> {
   const dict: Record<string, string> = {};
-  
+
   async function scan(dir: string) {
     let items;
     try {
@@ -110,10 +109,10 @@ export async function buildDict(
     } catch {
       return;
     }
-    
+
     for (const it of items) {
       const full = path.join(dir, it.name);
-      
+
       if (it.isDirectory()) {
         // Пропускаем папки "отказы"
         if (/^отказы$/i.test(it.name)) {
@@ -149,11 +148,11 @@ export async function buildDict(
         }
         continue;
       }
-      
+
       dict[code] = full;
     }
   }
-  
+
   await scan(root);
   return dict;
 }
@@ -161,10 +160,7 @@ export async function buildDict(
 /**
  * Создать реестр файлов в формате DOCX
  */
-export async function createRegisterDocx(
-  outputFolder: string,
-  files: string[]
-): Promise<string> {
+export async function createRegisterDocx(outputFolder: string, files: string[]): Promise<string> {
   // Подготовка: имена без расширений
   const names = files.map(f => {
     const b = path.basename(f);
@@ -303,7 +299,7 @@ export async function createRegisterDocx(
   const outPath = path.join(outputFolder, filename);
   const buffer = await Packer.toBuffer(doc);
   await fsp.writeFile(outPath, buffer);
-  
+
   return outPath;
 }
 
@@ -315,22 +311,19 @@ export async function mergePdfFiles(
   zepbPath: string,
   outputPath: string
 ): Promise<void> {
-  const [notifBuf, zepbBuf] = await Promise.all([
-    fsp.readFile(notifPath),
-    fsp.readFile(zepbPath)
-  ]);
-  
+  const [notifBuf, zepbBuf] = await Promise.all([fsp.readFile(notifPath), fsp.readFile(zepbPath)]);
+
   const [notifDoc, zepbDoc] = await Promise.all([
     PDFDocument.load(notifBuf),
     PDFDocument.load(zepbBuf)
   ]);
-  
+
   const merged = await PDFDocument.create();
 
   // Копируем страницы уведомления
   const notifPages = await merged.copyPages(notifDoc, notifDoc.getPageIndices());
   notifPages.forEach(p => merged.addPage(p));
-  
+
   // Копируем страницы ЗЭПБ
   const zepbPages = await merged.copyPages(zepbDoc, zepbDoc.getPageIndices());
   zepbPages.forEach(p => merged.addPage(p));

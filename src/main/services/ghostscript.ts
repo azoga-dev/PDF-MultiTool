@@ -41,7 +41,7 @@ export async function findGhostscript(): Promise<string | null> {
       // Игнорируем неудачные попытки
     }
   }
-  
+
   return null;
 }
 
@@ -84,7 +84,7 @@ export async function compressWithGhostscript(
     ];
 
     const { stdout, stderr } = await execFileAsync(gsCmd, args);
-    
+
     // Проверяем, что выходной файл создан
     if (!(await fs.pathExists(outputPath))) {
       return {

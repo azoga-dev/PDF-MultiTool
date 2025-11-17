@@ -50,7 +50,7 @@ export async function compressSinglePdf(
 ): Promise<FileProcessResult> {
   const fname = path.basename(inputPath);
   const result: FileProcessResult = { name: fname, ok: false };
-  
+
   // Временные файлы для Ghostscript (с ASCII именами)
   const tmpIn = path.join(os.tmpdir(), `in-${randomUUID()}.pdf`);
   const tmpOut = path.join(os.tmpdir(), `out-${randomUUID()}.pdf`);
@@ -63,9 +63,9 @@ export async function compressSinglePdf(
     if (gsCmd) {
       // Используем Ghostscript
       await fsp.copyFile(inputPath, tmpIn);
-      
+
       const gsResult = await compressWithGhostscript(gsCmd, tmpIn, tmpOut, quality);
-      
+
       if (gsResult.success) {
         await fs.copy(tmpOut, outputPath, { overwrite: true });
         result.ok = true;
@@ -74,10 +74,18 @@ export async function compressSinglePdf(
         result.ok = false;
         result.error = gsResult.error;
       }
-      
+
       // Очищаем временные файлы
-      try { await fs.remove(tmpIn); } catch { /* ignore */ }
-      try { await fs.remove(tmpOut); } catch { /* ignore */ }
+      try {
+        await fs.remove(tmpIn);
+      } catch {
+        /* ignore */
+      }
+      try {
+        await fs.remove(tmpOut);
+      } catch {
+        /* ignore */
+      }
     } else {
       // Fallback: используем pdf-lib (без настоящего сжатия)
       try {
@@ -85,7 +93,7 @@ export async function compressSinglePdf(
         const pdfDoc = await PDFDocument.load(inputBytes);
         const outBytes = await pdfDoc.save();
         await fsp.writeFile(outputPath, outBytes);
-        
+
         result.ok = true;
         result.notes = 'fallback';
       } catch (fbErr) {
@@ -97,7 +105,7 @@ export async function compressSinglePdf(
     // Получаем размер выходного файла
     const statOut = await fsp.stat(outputPath).catch(() => ({ size: undefined }));
     result.outSize = statOut.size;
-    
+
     return result;
   } catch (err) {
     result.ok = false;
@@ -135,7 +143,7 @@ export async function compressFiles(
     if (!outputFolder) {
       throw new Error('Не указана папка вывода');
     }
-    
+
     await fs.ensureDir(outputFolder);
 
     // Фильтруем только PDF файлы
@@ -171,7 +179,7 @@ export async function compressFiles(
       const outPath = path.join(outputFolder, fname);
 
       const fileResult = await compressSinglePdf(fullPath, outPath, quality, gsCmd);
-      
+
       if (fileResult.ok) {
         result.processed++;
         result.log.push(
@@ -184,7 +192,7 @@ export async function compressFiles(
       }
 
       result.files?.push(fileResult);
-      
+
       // Вызываем callback для прогресса
       if (progressCallback) {
         progressCallback(index + 1, result.total, fileResult);
@@ -229,13 +237,13 @@ export async function compressPdfs(
     if (!(await fs.pathExists(inputFolder))) {
       throw new Error(`Input folder не найден: ${inputFolder}`);
     }
-    
+
     await fs.ensureDir(outputFolder);
 
     // Получаем список PDF файлов
     const all = await fsp.readdir(inputFolder);
     const pdfs = all.filter(f => f.toLowerCase().endsWith('.pdf'));
-    
+
     result.total = pdfs.length;
     result.log.push(`Найдено ${pdfs.length} PDF в ${inputFolder}`);
 
@@ -256,7 +264,7 @@ export async function compressPdfs(
       const outPath = path.join(outputFolder, fname);
 
       const fileResult = await compressSinglePdf(inPath, outPath, quality, gsCmd);
-      
+
       if (fileResult.ok) {
         result.processed++;
         result.log.push(
@@ -269,7 +277,7 @@ export async function compressPdfs(
       }
 
       result.files?.push(fileResult);
-      
+
       // Вызываем callback для прогресса
       if (progressCallback) {
         progressCallback(index + 1, result.total, fileResult);

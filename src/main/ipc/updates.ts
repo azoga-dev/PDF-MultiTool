@@ -73,7 +73,7 @@ export function registerUpdateHandlers(getMainWindow: () => BrowserWindow | null
  * @param getMainWindow - функция для получения главного окна
  */
 export function setupAutoUpdaterListeners(getMainWindow: () => BrowserWindow | null): void {
-  autoUpdater.on('update-available', (info) => {
+  autoUpdater.on('update-available', info => {
     const mainWindow = getMainWindow();
     if (info.version !== app.getVersion()) {
       mainWindow?.webContents.send('update-available', info.version);
@@ -87,17 +87,17 @@ export function setupAutoUpdaterListeners(getMainWindow: () => BrowserWindow | n
     mainWindow?.webContents.send('update-not-available');
   });
 
-  autoUpdater.on('error', (err) => {
+  autoUpdater.on('error', err => {
     const mainWindow = getMainWindow();
     mainWindow?.webContents.send('update-error', (err as Error).message);
   });
 
-  autoUpdater.on('download-progress', (p) => {
+  autoUpdater.on('download-progress', p => {
     const mainWindow = getMainWindow();
     mainWindow?.webContents.send('update-download-progress', p.percent);
   });
 
-  autoUpdater.on('update-downloaded', (info) => {
+  autoUpdater.on('update-downloaded', info => {
     const mainWindow = getMainWindow();
     mainWindow?.webContents.send('update-downloaded', info.version);
   });

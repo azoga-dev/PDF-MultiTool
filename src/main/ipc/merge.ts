@@ -78,7 +78,7 @@ export function registerMergeHandlers(
         if (!mainFolder || !insertFolder || !outputFolder) {
           throw new Error('Не указаны папки');
         }
-        
+
         await fs.ensureDir(outputFolder);
         mergeCancelRequested = false;
 
@@ -93,7 +93,8 @@ export function registerMergeHandlers(
         const zepbDict = await buildDict(
           mainFolder,
           !!recursiveMain,
-          (full, name) => full.toLowerCase().endsWith('.pdf') && name.toLowerCase().includes('зэпб'),
+          (full, name) =>
+            full.toLowerCase().endsWith('.pdf') && name.toLowerCase().includes('зэпб'),
           extractZepbCode
         );
 
@@ -129,7 +130,7 @@ export function registerMergeHandlers(
             const cancelMsg = 'Операция объединения отменена пользователем';
             summary.log.push(cancelMsg);
             summary.canceled = true;
-            
+
             mainWindow?.webContents.send('merge-progress', {
               processed: summary.processed,
               skipped: summary.skipped,
@@ -137,7 +138,7 @@ export function registerMergeHandlers(
               current: i + 1,
               message: cancelMsg
             });
-            
+
             logStore.push(cancelMsg);
             logWindow?.webContents.send('log-append', cancelMsg);
             break;
@@ -153,7 +154,7 @@ export function registerMergeHandlers(
             const msg = `Не найден ЗЭПБ для уведомления: ${path.basename(notifPath)} (${code})`;
             summary.log.push(msg);
             summary.skipped++;
-            
+
             mainWindow?.webContents.send('merge-progress', {
               processed: summary.processed,
               skipped: summary.skipped,
@@ -162,7 +163,7 @@ export function registerMergeHandlers(
               code,
               message: msg
             });
-            
+
             logStore.push(msg);
             logWindow?.webContents.send('log-append', msg);
             continue;
@@ -173,7 +174,7 @@ export function registerMergeHandlers(
             const msg = `Пропущен уже обработанный ЗЭПБ: ${path.basename(zepbPath)}`;
             summary.log.push(msg);
             summary.skipped++;
-            
+
             mainWindow?.webContents.send('merge-progress', {
               processed: summary.processed,
               skipped: summary.skipped,
@@ -182,7 +183,7 @@ export function registerMergeHandlers(
               code,
               message: msg
             });
-            
+
             logStore.push(msg);
             logWindow?.webContents.send('log-append', msg);
             continue;
@@ -206,7 +207,7 @@ export function registerMergeHandlers(
 
             const msg = `Сшито: ${outName}`;
             summary.log.push(msg);
-            
+
             mainWindow?.webContents.send('merge-progress', {
               processed: summary.processed,
               skipped: summary.skipped,
@@ -215,7 +216,7 @@ export function registerMergeHandlers(
               code,
               message: msg
             });
-            
+
             logStore.push(msg);
             logWindow?.webContents.send('log-append', msg);
           } catch (err) {
@@ -223,7 +224,7 @@ export function registerMergeHandlers(
             summary.log.push(msg);
             summary.errors.push(msg);
             summary.skipped++;
-            
+
             mainWindow?.webContents.send('merge-progress', {
               processed: summary.processed,
               skipped: summary.skipped,
@@ -232,7 +233,7 @@ export function registerMergeHandlers(
               code,
               message: msg
             });
-            
+
             logStore.push(msg);
             logWindow?.webContents.send('log-append', msg);
           }
@@ -263,14 +264,14 @@ export function registerMergeHandlers(
         console.error(msg);
         summary.errors.push(msg);
         summary.log.push(msg);
-        
+
         mainWindow?.webContents.send('merge-complete', {
           summary,
           registry: null,
           unmatchedNotifications: [],
           unmatchedZepb: []
         });
-        
+
         return {
           ...summary,
           registry: null,
@@ -290,12 +291,7 @@ export function registerMergeHandlers(
   // IPC: построение словаря
   ipcMain.handle(
     'build-dict',
-    async (
-      _e,
-      type: 'zepb' | 'insert',
-      folderPath: string,
-      recursive: boolean
-    ) => {
+    async (_e, type: 'zepb' | 'insert', folderPath: string, recursive: boolean) => {
       try {
         if (type === 'zepb') {
           return await buildDict(

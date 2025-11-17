@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-electron-builder/
+vendor/
+coverage/
+*.js
+!.eslintrc.cjs
+!jest.config.js
+
+# Old files (to be removed after full migration)
+src/main.ts
+src/preload.ts
+src/renderer.ts
+src/logWindowRenderer.ts

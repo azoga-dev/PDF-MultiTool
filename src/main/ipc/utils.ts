@@ -31,8 +31,8 @@ export function registerUtilsHandlers(
       defaultPath && (await fs.pathExists(defaultPath))
         ? defaultPath
         : lastSelectedFolder && (await fs.pathExists(lastSelectedFolder))
-        ? lastSelectedFolder
-        : undefined;
+          ? lastSelectedFolder
+          : undefined;
 
     const result = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow()!, {
       properties: ['openDirectory'],
@@ -43,7 +43,7 @@ export function registerUtilsHandlers(
       lastSelectedFolder = result.filePaths[0];
       return lastSelectedFolder;
     }
-    
+
     return null;
   });
 
@@ -117,7 +117,7 @@ export function registerUtilsHandlers(
   ipcMain.on('append-log', (_e, message: string) => {
     const line = typeof message === 'string' ? message : JSON.stringify(message);
     logStore.push(line);
-    
+
     const logWindow = getLogWindow();
     if (logWindow && !logWindow.isDestroyed()) {
       logWindow.webContents.send('log-append', line);
@@ -135,19 +135,16 @@ export function registerUtilsHandlers(
     const defaultName =
       suggestedName ||
       `pdfmanager-log-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.txt`;
-      
-    const { filePath, canceled } = await dialog.showSaveDialog(
-      BrowserWindow.getFocusedWindow()!,
-      {
-        defaultPath: defaultName,
-        filters: [{ name: 'Text', extensions: ['txt', 'log'] }]
-      }
-    );
-    
+
+    const { filePath, canceled } = await dialog.showSaveDialog(BrowserWindow.getFocusedWindow()!, {
+      defaultPath: defaultName,
+      filters: [{ name: 'Text', extensions: ['txt', 'log'] }]
+    });
+
     if (canceled || !filePath) {
       return { ok: false };
     }
-    
+
     try {
       await fsp.writeFile(filePath, logStore.join('\n'), { encoding: 'utf8' });
       return { ok: true, path: filePath };

@@ -28,7 +28,7 @@ export function createMainWindow(): BrowserWindow {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
-  
+
   return mainWindow;
 }
 
@@ -55,7 +55,7 @@ export async function createLogWindow(
   });
 
   const htmlPath = path.join(__dirname, 'logWindow.html');
-  
+
   await logWindow.loadFile(htmlPath).catch(err => {
     console.error('Ошибка загрузки logWindow.html:', err);
     logStore.push(`[ERROR] Ошибка загрузки logWindow.html: ${(err as Error).message}`);
@@ -95,7 +95,8 @@ export async function createLogWindow(
 
         try {
           const cssFileUrl = pathToFileURL(cssPath).href;
-          await logWindow.webContents.executeJavaScript(`
+          await logWindow.webContents.executeJavaScript(
+            `
             (function(){
               if (!document.querySelector('link[data-injected-styles]')) {
                 const l = document.createElement('link');
@@ -106,7 +107,9 @@ export async function createLogWindow(
               }
               return true;
             })();
-          `, true);
+          `,
+            true
+          );
           logStore.push(`[DEBUG] <link> injected: ${cssPath}`);
         } catch (err) {
           console.warn('[logWindow] insert <link> failed:', (err as Error).message);
@@ -114,12 +117,13 @@ export async function createLogWindow(
         }
       } else {
         const warn = `styles.css не найден (пытались: ${candidates.join(', ')})`;
-        console.warn('[logWindow] ' + warn);
+        console.warn(`[logWindow] ${warn}`);
         logStore.push(`[WARN] ${warn}`);
       }
 
       // Диагностика и fallback CSS
-      const diag = await logWindow.webContents.executeJavaScript(`
+      const diag = await logWindow.webContents.executeJavaScript(
+        `
         (function(){
           try {
             const sheets = document.styleSheets ? document.styleSheets.length : 0;
@@ -133,7 +137,9 @@ export async function createLogWindow(
             return { error: e && e.message };
           }
         })();
-      `, true);
+      `,
+        true
+      );
 
       logStore.push(`[DEBUG] logWindow diag: ${JSON.stringify(diag)}`);
 

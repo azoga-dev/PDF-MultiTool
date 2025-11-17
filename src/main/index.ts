@@ -9,18 +9,14 @@ import { createMainWindow, createLogWindow } from './window';
 import { registerCompressHandlers } from './ipc/compress';
 import { registerMergeHandlers } from './ipc/merge';
 import { registerUtilsHandlers } from './ipc/utils';
-import {
-  registerUpdateHandlers,
-  setupAutoUpdaterListeners,
-  setIsQuitting
-} from './ipc/updates';
+import { registerUpdateHandlers, setupAutoUpdaterListeners, setIsQuitting } from './ipc/updates';
 
 /**
  * Глобальное состояние приложения
  */
 let mainWindow: BrowserWindow | null = null;
 let logWindow: BrowserWindow | null = null;
-let currentThemeIsDark = false;
+const currentThemeIsDark = false;
 
 /**
  * Хранилище логов
@@ -51,7 +47,7 @@ async function createLogWindowWithState(): Promise<BrowserWindow> {
   }
 
   logWindow = await createLogWindow(logStore, currentThemeIsDark);
-  
+
   logWindow.on('closed', () => {
     logWindow = null;
   });

@@ -13,7 +13,9 @@ import fs from 'fs-extra';
  * @returns true если файл помечен как обработанный
  */
 export function fileMarkedProcessed(name: string): boolean {
-  return /(\(.*?(с увед|с уведомл|with notification).*?\)|\bс увед\b|\bс уведомл\b|\bwith notification\b|\bобъединен\b|\bprocessed\b)/i.test(name);
+  return /(\(.*?(с увед|с уведомл|with notification).*?\)|\bс увед\b|\bс уведомл\b|\bwith notification\b|\bобъединен\b|\bprocessed\b)/i.test(
+    name
+  );
 }
 
 /**
