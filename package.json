@@ -1,7 +1,7 @@
 {
   "name": "pdf-electron-app",
   "productName": "PDFmanager",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Application for working with PDF files",
   "main": "./dist/main.js",
   "scripts": {
@@ -22,6 +22,7 @@
     "autoprefixer": "^10.4.19",
     "electron": "^31.7.7",
     "electron-builder": "^24.13.3",
+    "electron-rebuild": "^3.2.9",
     "nodemon": "^3.1.10",
     "postcss": "^8.4.39",
     "shelljs": "^0.10.0",
@@ -29,11 +30,13 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
+    "argon2": "^0.44.0",
     "axios": "^1.13.2",
+    "better-sqlite3": "^12.4.1",
     "docx": "^8.4.0",
     "electron-updater": "^6.6.2",
     "exceljs": "^4.4.0",
-    "fs-extra": "^11.2.0",
+    "fs-extra": "^11.3.2",
     "pandas-js": "^0.2.4",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.394",
@@ -61,7 +64,9 @@
       {
         "from": "vendor/ghostscript/",
         "to": "ghostscript",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
