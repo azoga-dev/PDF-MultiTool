@@ -111,11 +111,6 @@ const unmatchedClearBtn = document.getElementById('unmatched-clear') as HTMLButt
 const unmatchedCountBadge = document.getElementById('unmatched-count-badge') as HTMLSpanElement | null;
 const unmatchedEmpty = document.getElementById('unmatched-empty') as HTMLDivElement | null;
 
-const confirmClearModal = document.getElementById('confirm-clear-modal') as HTMLDivElement | null;
-const confirmClearYes = document.getElementById('confirm-clear-yes') as HTMLButtonElement | null;
-const confirmClearNo = document.getElementById('confirm-clear-no') as HTMLButtonElement | null;
-const confirmClearBackdrop = document.getElementById('confirm-clear-backdrop') as HTMLDivElement | null;
-
 /* Динамически создаём кнопку "Открыть лог", если её нет в DOM */
 (function ensureLogButton() {
   if (document.getElementById('btn-open-log')) return;
@@ -179,6 +174,167 @@ const confirmClearBackdrop = document.getElementById('confirm-clear-backdrop') a
   });
 })();
 
+(function createConfirmClearModal() {
+  // If there is already an element with that id (leftover), remove it first
+  const existing = document.getElementById('confirm-clear-modal');
+  if (existing) existing.remove();
+
+  // Styles for modal (scoped, specific, with !important to override app CSS conflicts)
+  const style = document.createElement('style');
+  style.id = 'confirm-clear-modal-styles';
+  style.textContent = `
+  /* Modal overlay */
+  #confirm-clear-modal { position: fixed !important; inset: 0 !important; display: none !important; align-items: center !important; justify-content: center !important; z-index: 99999 !important; }
+  #confirm-clear-modal.confirm-visible { display: flex !important; }
+  #confirm-clear-modal .confirm-backdrop { position: absolute !important; inset: 0 !important; background: rgba(0,0,0,0.55) !important; backdrop-filter: blur(2px) !important; -webkit-backdrop-filter: blur(2px) !important; }
+  #confirm-clear-modal .confirm-panel { position: relative !important; z-index: 100000 !important; width: 560px !important; max-width: calc(100% - 40px) !important; background: var(--main-bg, #fff) !important; color: var(--text-color, #111827) !important; border: 1px solid var(--sidebar-border, #e5e7eb) !important; border-radius: 10px !important; padding: 16px !important; box-shadow: 0 12px 40px rgba(2,6,23,0.45) !important; box-sizing: border-box !important; transform: none !important; transition: none !important; }
+  #confirm-clear-modal .confirm-header { font-weight:600; margin-bottom:6px; font-size:15px; }
+  #confirm-clear-modal .confirm-body { font-size:13px; line-height:1.4; color:var(--text-color, #111827); }
+  #confirm-clear-modal .confirm-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+  /* Buttons inside panel */
+  #confirm-clear-modal .btn { padding:8px 12px; border-radius:8px; cursor:pointer; }
+  #confirm-clear-modal .btn.btn-outline { background: transparent; border:1px solid var(--sidebar-border, #e5e7eb); color:var(--text-color, #111827); }
+  #confirm-clear-modal .btn.btn-primary { background:#ef4444; color:#fff; border:none; }
+  #confirm-clear-modal .btn:focus { outline: 2px solid rgba(59,130,246,0.18); outline-offset: 2px; }
+  `;
+  document.head.appendChild(style);
+
+  // Build modal structure
+  const modal = document.createElement('div');
+  modal.id = 'confirm-clear-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-hidden', 'true');
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'confirm-backdrop';
+  backdrop.tabIndex = -1; // allow focus for backdrop if needed
+
+  const panel = document.createElement('div');
+  panel.className = 'confirm-panel';
+  panel.setAttribute('role', 'document');
+  panel.tabIndex = -1;
+
+  const header = document.createElement('div');
+  header.className = 'confirm-header';
+  header.textContent = 'Подтвердите очистку настроек';
+
+  const body = document.createElement('div');
+  body.className = 'confirm-body';
+  body.innerHTML = `Вы уверены, что хотите сбросить все настройки приложения? <br>
+    Это действие удалит выбранные папки, параметры сжатия и очистит список несшитых файлов в интерфейсе.`;
+
+  const actions = document.createElement('div');
+  actions.className = 'confirm-actions';
+
+  const btnNo = document.createElement('button');
+  btnNo.type = 'button';
+  btnNo.className = 'btn btn-outline';
+  btnNo.id = 'confirm-clear-no';
+  btnNo.textContent = 'Отмена';
+
+  const btnYes = document.createElement('button');
+  btnYes.type = 'button';
+  btnYes.className = 'btn btn-primary';
+  btnYes.id = 'confirm-clear-yes';
+  btnYes.textContent = 'Очистить';
+
+  actions.appendChild(btnNo);
+  actions.appendChild(btnYes);
+
+  panel.appendChild(header);
+  panel.appendChild(body);
+  panel.appendChild(actions);
+
+  modal.appendChild(backdrop);
+  modal.appendChild(panel);
+
+  // Append modal to body (end) so it is top-level and not affected by parent transforms
+  document.body.appendChild(modal);
+
+  // Expose references to use in other code
+  (window as any).__confirmClearModal = modal;
+  (window as any).__confirmClearBackdrop = backdrop;
+  (window as any).__confirmClearYes = btnYes;
+  (window as any).__confirmClearNo = btnNo;
+
+  // Handlers
+  function openModal() {
+    const m = (window as any).__confirmClearModal as HTMLDivElement;
+    if (!m) return;
+    m.classList.add('confirm-visible');
+    m.setAttribute('aria-hidden', 'false');
+    // Prevent background scroll
+    document.body.style.overflow = 'hidden';
+    // focus cancel by default
+    ((window as any).__confirmClearNo as HTMLButtonElement)?.focus();
+  }
+  function closeModal() {
+    const m = (window as any).__confirmClearModal as HTMLDivElement;
+    if (!m) return;
+    m.classList.remove('confirm-visible');
+    m.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  // Backdrop click and cancel button close without clearing
+  backdrop.addEventListener('click', () => closeModal());
+  btnNo.addEventListener('click', () => closeModal());
+
+  // ESC closes modal
+  document.addEventListener('keydown', (ev) => {
+    const m = (window as any).__confirmClearModal as HTMLDivElement;
+    if (!m || !m.classList.contains('confirm-visible')) return;
+    if (ev.key === 'Escape') closeModal();
+  });
+
+  // Confirm: run existing performClearSettingsAndUi() then close
+  btnYes.addEventListener('click', async () => {
+    try {
+      const fn = (window as any).performClearSettingsAndUi;
+      if (typeof fn === 'function') {
+        await fn();
+      } else {
+        // на случай, если функция ещё не зарегистрирована в window — логируем
+        console.error('performClearSettingsAndUi is not available on window');
+      }
+    } catch (e) {
+      console.error('Error in confirm clear handler', e);
+    } finally {
+      // закрываем модалку в любом случае
+      closeModal();
+    }
+  });
+
+  // Hook main "Clear settings" button to open modal (replace old listeners)
+  const btn = document.getElementById('btn-clear-settings') as HTMLButtonElement | null;
+  if (btn) {
+    try {
+      const fresh = btn.cloneNode(true) as HTMLButtonElement;
+      btn.parentElement?.replaceChild(fresh, btn);
+      fresh.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        // откроем модалку, если она создана и доступна
+        const mOpen = (window as any).openConfirmClearModal || (window as any).__openConfirmClearModal;
+        if (typeof mOpen === 'function') {
+          mOpen();
+          return;
+        }
+        // fallback: если модалка создана как element, диспатчим кастомное событие / показываем
+        const modalEl = document.getElementById('confirm-clear-modal');
+        if (modalEl) modalEl.classList.add('confirm-visible');
+      });
+    } catch {
+      // fallback
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        const modalEl = document.getElementById('confirm-clear-modal');
+        if (modalEl) modalEl.classList.add('confirm-visible');
+      });
+    }
+  }
+})();
+
 (function setupCompressDrop() {
   const dropEl = document.getElementById('compress-drop-hint') as HTMLDivElement | null;
   if (!dropEl) return;
@@ -239,109 +395,6 @@ function getThumbSize(): number {
   const v = settingThumbSize ? parseInt(settingThumbSize.value, 10) : 128;
   return Number.isFinite(v) ? v : 128;
 }
-
-function openConfirmClearModal() {
-  if (!confirmClearModal) return;
-  // переместим модалку в body (на всякий случай, если её вставили в другой контейнер)
-  if (confirmClearModal.parentElement !== document.body) document.body.appendChild(confirmClearModal);
-  confirmClearModal.classList.remove('hidden');
-  confirmClearModal.setAttribute('aria-hidden', 'false');
-  // фокусируем кнопку Отмена по умолчанию
-  confirmClearNo?.focus();
-  // блокируем прокрутку страницы при открытой модалке
-  document.body.style.overflow = 'hidden';
-}
-
-function closeConfirmClearModal() {
-  if (!confirmClearModal) return;
-  confirmClearModal.classList.add('hidden');
-  confirmClearModal.setAttribute('aria-hidden', 'true');
-  document.body.style.overflow = ''; // снимаем блокировку прокрутки
-}
-
-// функция очистки — вызывается ТОЛЬКО после подтверждения
-async function performClearSettingsAndUi() {
-  try {
-    // Очистка путей/словарей
-    mainFolder = '';
-    insertFolder = '';
-    outputFolder = '';
-    zepbDict = {};
-    insertDict = {};
-
-    // Обновляем метки папок в UI
-    try { updateFolderLabel(labelMain, null); } catch {}
-    try { updateFolderLabel(labelInsert, null); } catch {}
-    try { updateFolderLabel(labelOutput, null); } catch {}
-
-    // Сброс настроек сжатия / миниатюр к дефолту
-    if (settingCompressQuality) settingCompressQuality.value = '30';
-    if (settingThumbsEnabled) settingThumbsEnabled.checked = true;
-    if (settingThumbSize) settingThumbSize.value = '128';
-
-    // Очистка блока compress (если есть)
-    try { if (labelCompress) labelCompress.value = 'Не выбрана'; } catch {}
-    try { compressOutputFolder = null; } catch {}
-    try { if (labelCompressOutput) updateFolderLabel(labelCompressOutput, null); } catch {}
-
-    // Очистка unmatched
-    try { unmatchedItems = []; renderUnmatched(); if (unmatchedBlock) unmatchedBlock.style.display = 'none'; } catch {}
-
-    // Сохранение настроек
-    try { await saveSettings(); } catch (e) { console.warn('saveSettings error', e); }
-
-    // Обновление UI состояния
-    try { updateStats(); } catch {}
-    try { checkReady(); } catch {}
-    try { updateCompressReady(); } catch {}
-
-    // Popup уведомление
-    try { if (typeof showPopup === 'function') showPopup('Настройки очищены', 4000); else alert('Настройки очищены'); } catch {}
-
-    try { log('Настройки очищены', 'warning'); } catch {}
-  } catch (err) {
-    console.error('Ошибка при очистке настроек:', err);
-    try { log(`Ошибка при очистке настроек: ${(err as Error).message}`, 'error'); } catch {}
-  }
-}
-
-// Кнопка "Очистить" — только открывает модалку (НЕ очищает ничего сразу)
-if (btnClearSettings) {
-  // удаляем старые обработчики, если они есть (предотвращение двойного срабатывания)
-  btnClearSettings.replaceWith(btnClearSettings.cloneNode(true));
-}
-const btnClearSettingsLive = document.getElementById('btn-clear-settings') as HTMLButtonElement | null;
-if (btnClearSettingsLive) {
-  btnClearSettingsLive.addEventListener('click', (e) => {
-    e.preventDefault();
-    openConfirmClearModal();
-  });
-}
-
-// Обработчики модалки
-confirmClearNo?.addEventListener('click', () => {
-  // по отмене ничего не меняем — просто закрываем модалку
-  closeConfirmClearModal();
-});
-
-// клик по бэкдропу закрывает модалку
-confirmClearBackdrop?.addEventListener('click', () => {
-  closeConfirmClearModal();
-});
-
-// Подтверждение очистки
-confirmClearYes?.addEventListener('click', async () => {
-  closeConfirmClearModal();
-  await performClearSettingsAndUi();
-});
-
-// ESC на клавиатуре закрывает модалку
-document.addEventListener('keydown', (ev) => {
-  if (!confirmClearModal || confirmClearModal.classList.contains('hidden')) return;
-  if (ev.key === 'Escape') {
-    closeConfirmClearModal();
-  }
-});
 
 interface UnmatchedItem {
   type: 'notif' | 'zepb';
@@ -1479,54 +1532,68 @@ if (btnOpenOutput) btnOpenOutput.addEventListener('click', async () => {
   if (!ok) alert(`Не удалось открыть папку:\n${outputFolder}`);
 });
 
-if (btnClearSettings) {
-  btnClearSettings.addEventListener('click', async () => {
-    try {
-      // 1) Очистка основных путей и словарей
-      mainFolder = '';
-      insertFolder = '';
-      outputFolder = '';
-      zepbDict = {};
-      insertDict = {};
+async function performClearSettingsAndUi() {
+  try {
+    // Очистка путей/словарей
+    mainFolder = '';
+    insertFolder = '';
+    outputFolder = '';
+    zepbDict = {};
+    insertDict = {};
 
-      // Обновляем подписи/лейблы папок в UI
-      updateFolderLabel(labelMain, null);
-      updateFolderLabel(labelInsert, null);
-      updateFolderLabel(labelOutput, null);
+    // Обновляем подписи/лейблы в UI
+    try { updateFolderLabel(labelMain, null); } catch {}
+    try { updateFolderLabel(labelInsert, null); } catch {}
+    try { updateFolderLabel(labelOutput, null); } catch {}
 
-      // 2) Очистка настроек сжатия/миниатюр в UI (возвращаем к значениям по умолчанию)
-      if (settingCompressQuality) settingCompressQuality.value = '30';
-      if (settingThumbsEnabled) settingThumbsEnabled.checked = true;
-      if (settingThumbSize) settingThumbSize.value = '128';
+    // Сброс настроек сжатия / миниатюр к дефолту
+    if (settingCompressQuality) settingCompressQuality.value = '30';
+    if (settingThumbsEnabled) settingThumbsEnabled.checked = true;
+    if (settingThumbSize) settingThumbSize.value = '128';
 
-      // Очистка полей compress (вход/выход)
-      if (labelCompress) labelCompress.value = 'Не выбрана';
-      compressOutputFolder = null;
-      if (labelCompressOutput) updateFolderLabel(labelCompressOutput, null);
+    // Очистка полей compress (вход/выход)
+    try { if (labelCompress) labelCompress.value = 'Не выбрана'; } catch {}
+    try { compressOutputFolder = null; } catch {}
+    try { if (labelCompressOutput) updateFolderLabel(labelCompressOutput, null); } catch {}
 
-      // 3) Обновление состояний интерфейса
-      updateStats();
-      checkReady();
-      updateCompressReady();
+    // Очистка unmatched и скрытие
+    try { unmatchedItems = []; renderUnmatched(); if (unmatchedBlock) unmatchedBlock.style.display = 'none'; } catch {}
 
-      // 4) Очистить блок несшитых и скрыть его
-      try {
-        unmatchedItems = [];
-        renderUnmatched();
-        if (unmatchedBlock) unmatchedBlock.style.display = 'none';
-      } catch (e) {
-        // Если блока ещё нет — игнорируем
-      }
+    // Сохранение настроек (preload -> main)
+    try { await window.electronAPI.saveSettings({
+      mainFolder: '',
+      insertFolder: '',
+      outputFolder: '',
+      mainRecursive: chkMainRecursive.checked,
+      insertRecursive: chkInsertRecursive.checked,
+      compressInputFolder: null,
+      compressOutputFolder: null,
+      lastSelectedCompress: null,
+      lastSelectedCompressOutputFolder: null,
+      compressQuality: settingCompressQuality ? parseInt(settingCompressQuality.value, 10) : undefined,
+      thumbnailsEnabled: settingThumbsEnabled ? !!settingThumbsEnabled.checked : undefined,
+      thumbnailSize: settingThumbSize ? parseInt(settingThumbSize.value, 10) : undefined,
+    }); } catch (e) { console.warn('saveSettings error', e); }
 
-      // 5) Сохранить настройки (сейчас пустые/дефолтные)
-      await saveSettings();
+    // Обновление UI состояния
+    try { updateStats(); } catch {}
+    try { checkReady(); } catch {}
+    try { updateCompressReady(); } catch {}
 
-      log('Настройки очищены', 'warning');
-    } catch (err) {
-      console.error('Ошибка при очистке настроек:', err);
-      log(`Ошибка при очистке настроек: ${(err as Error).message}`, 'error');
-    }
-  });
+    // Уведомление и лог
+    try { showPopup('Настройки очищены', 4000); } catch {}
+    try { log('Настройки очищены', 'warning'); } catch {}
+  } catch (err) {
+    console.error('Ошибка при очистке настроек:', err);
+    try { log(`Ошибка при очистке настроек: ${(err as Error).message}`, 'error'); } catch {}
+  }
+}
+
+// Экспортируем в window, чтобы модалка могла найти функцию динамически
+try {
+  (window as any).performClearSettingsAndUi = performClearSettingsAndUi;
+} catch (e) {
+  console.warn('Could not attach performClearSettingsAndUi to window', e);
 }
 
 /* Всплывающий popup */

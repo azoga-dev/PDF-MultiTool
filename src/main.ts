@@ -70,8 +70,26 @@ const extractZepbCode = (filename: string): string | null => {
   return m ? m[0].toUpperCase() : null;
 };
 
+/**
+ * Привести код к канонической форме для сопоставления.
+ * Удаляет дробную часть после точки (например: СПД-1245.25 -> СПД-1245).
+ * Оставляет буквы и число в верхнем регистре. Возвращает null при пустом input.
+ */
+function canonicalCode(raw: string | null): string | null {
+  if (!raw) return null;
+  // Удаляем окончание вида ".<digits>" (год/субномер). Поддерживаем 1..4 цифр.
+  // Например: "СПД-1245.25" -> "СПД-1245", "СПД-1245.2024" -> "СПД-1245"
+  const stripped = String(raw).replace(/\.\d{1,4}$/i, '');
+  return stripped.toUpperCase();
+}
+
 /* Сканирование папки и построение словаря код->путь */
-async function buildDict(root: string, recursive: boolean, fileFilter: (full: string, name: string) => boolean, extractCode: (nameOrPath: string) => string | null) {
+async function buildDict(
+  root: string,
+  recursive: boolean,
+  fileFilter: (full: string, name: string) => boolean,
+  extractCode: (nameOrPath: string) => string | null
+) {
   const dict: Record<string, string> = {};
   async function scan(dir: string) {
     let items;
@@ -81,18 +99,25 @@ async function buildDict(root: string, recursive: boolean, fileFilter: (full: st
       const full = path.join(dir, it.name);
       if (it.isDirectory()) {
         if (/^отказы$/i.test(it.name)) {
-          // Можно залогировать (не обязательно)
-          // console.debug('[buildDict] skip folder ОТКАЗЫ:', full);
           continue;
         }
         if (recursive) await scan(full);
         continue;
       }
+
       if (!it.isFile()) continue;
       if (!fileFilter(full, it.name)) continue;
       if (fileMarkedProcessed(it.name)) continue;
-      const code = extractCode(it.name);
+
+      // извлечь сырой код (например "СПД-1245.25" или "СПД-1245")
+      const rawCode = extractCode(it.name);
+      if (!rawCode) continue;
+
+      // каноническая версия (например "СПД-1245")
+      const code = canonicalCode(rawCode);
       if (!code) continue;
+
+      // конфликты: оставляем более новый файл по mtime
       if (dict[code]) {
         try {
           const [s1, s2] = await Promise.all([fsp.stat(dict[code]), fsp.stat(full)]);
@@ -155,7 +180,7 @@ async function createRegisterDocx(outputFolder: string, files: string[]): Promis
       }),
       new TableCell({
         verticalAlign: VerticalAlign.CENTER,
-        width: { size: cmToTwip(19.0), type: WidthType.DXA },
+        width: { size: cmToTwip(17.0), type: WidthType.DXA },
         children: [
           new Paragraph({
             children: [new TextRun({ text: 'Наименование файла', bold: true, size: 24 })],
@@ -182,7 +207,7 @@ async function createRegisterDocx(outputFolder: string, files: string[]): Promis
         }),
         new TableCell({
           verticalAlign: VerticalAlign.CENTER,
-          width: { size: cmToTwip(19.0), type: WidthType.DXA },
+          width: { size: cmToTwip(17.0), type: WidthType.DXA },
           children: [
             new Paragraph({
               children: [new TextRun({ text: nm, size: 24 })],
@@ -196,7 +221,7 @@ async function createRegisterDocx(outputFolder: string, files: string[]): Promis
 
   const table = new Table({
     rows: [headerRow, ...dataRows],
-    width: { size: cmToTwip(20.0), type: WidthType.DXA },
+    width: { size: cmToTwip(19.0), type: WidthType.DXA },
   });
 
   children.push(table);
