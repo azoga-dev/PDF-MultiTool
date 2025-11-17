@@ -3,16 +3,20 @@
   "productName": "PDFmanager",
   "version": "1.0.2",
   "description": "Application for working with PDF files",
-  "main": "./dist/main.js",
+  "main": "./dist/main/index.js",
   "scripts": {
     "start": "electron .",
+    "start:dev": "npm run build && electron .",
     "build": "tsc",
+    "build:tsc": "tsc",
     "build:tailwind": "npx tailwindcss -i ./src/input.css -o ./src/styles.css",
     "package": "npm run build && npm run build:tailwind",
     "make": "npm run package && npx electron-builder --win --x64",
     "publish": "npm run package && npx electron-builder --win --x64 --publish=always",
     "copy-assets": "node copy-assets.js",
-    "watch-assets": "nodemon --watch src/index.html --watch src/styles.css --exec \"npm run copy-assets\""
+    "watch-assets": "nodemon --watch src/index.html --watch src/styles.css --exec \"npm run copy-assets\"",
+    "lint": "echo 'Linting not configured yet'",
+    "test": "echo 'Tests not configured yet'"
   },
   "keywords": [],
   "author": "azoga99",
