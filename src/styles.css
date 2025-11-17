@@ -656,6 +656,10 @@ video {
   align-items: center;
 }
 
+.break-all {
+  word-break: break-all;
+}
+
 .border {
   border-width: 1px;
 }

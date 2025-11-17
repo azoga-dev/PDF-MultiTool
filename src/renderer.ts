@@ -51,7 +51,7 @@ const btnOutput = document.getElementById('btn-output') as HTMLButtonElement;
 const labelOutput = document.getElementById('label-output') as HTMLInputElement;
 const btnRun = document.getElementById('btn-run') as HTMLButtonElement;
 const btnOpenOutput = document.getElementById('btn-open-output') as HTMLButtonElement;
-const btnClearSettings = document.getElementById('btn-clear-settings') as HTMLButtonElement;
+const btnClearSettings = document.getElementById('btn-clear-settings') as HTMLButtonElement | null;
 
 const statsZepb = document.getElementById('stats-zepb') as HTMLSpanElement;
 const statsNotif = document.getElementById('stats-notif') as HTMLSpanElement;
@@ -101,6 +101,20 @@ const compressStatusLabel = document.getElementById('compress-status-label') as 
 const compressTableBody = document.querySelector('#compress-table tbody') as HTMLTableSectionElement | null;
 const btnOpenReport = document.getElementById('btn-open-report') as HTMLButtonElement | null;
 const btnCompressClear = document.getElementById('btn-compress-clear') as HTMLButtonElement | null;
+
+const unmatchedBlock = document.getElementById('unmatched-block') as HTMLDivElement | null;
+const unmatchedTableBody = document.querySelector('#unmatched-table tbody') as HTMLTableSectionElement | null;
+const unmatchedSearch = document.getElementById('unmatched-search') as HTMLInputElement | null;
+const unmatchedFilter = document.getElementById('unmatched-filter-type') as HTMLSelectElement | null;
+const unmatchedExportBtn = document.getElementById('unmatched-export') as HTMLButtonElement | null;
+const unmatchedClearBtn = document.getElementById('unmatched-clear') as HTMLButtonElement | null;
+const unmatchedCountBadge = document.getElementById('unmatched-count-badge') as HTMLSpanElement | null;
+const unmatchedEmpty = document.getElementById('unmatched-empty') as HTMLDivElement | null;
+
+const confirmClearModal = document.getElementById('confirm-clear-modal') as HTMLDivElement | null;
+const confirmClearYes = document.getElementById('confirm-clear-yes') as HTMLButtonElement | null;
+const confirmClearNo = document.getElementById('confirm-clear-no') as HTMLButtonElement | null;
+const confirmClearBackdrop = document.getElementById('confirm-clear-backdrop') as HTMLDivElement | null;
 
 /* Динамически создаём кнопку "Открыть лог", если её нет в DOM */
 (function ensureLogButton() {
@@ -224,6 +238,241 @@ function getThumbsEnabled(): boolean {
 function getThumbSize(): number {
   const v = settingThumbSize ? parseInt(settingThumbSize.value, 10) : 128;
   return Number.isFinite(v) ? v : 128;
+}
+
+function openConfirmClearModal() {
+  if (!confirmClearModal) return;
+  // переместим модалку в body (на всякий случай, если её вставили в другой контейнер)
+  if (confirmClearModal.parentElement !== document.body) document.body.appendChild(confirmClearModal);
+  confirmClearModal.classList.remove('hidden');
+  confirmClearModal.setAttribute('aria-hidden', 'false');
+  // фокусируем кнопку Отмена по умолчанию
+  confirmClearNo?.focus();
+  // блокируем прокрутку страницы при открытой модалке
+  document.body.style.overflow = 'hidden';
+}
+
+function closeConfirmClearModal() {
+  if (!confirmClearModal) return;
+  confirmClearModal.classList.add('hidden');
+  confirmClearModal.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = ''; // снимаем блокировку прокрутки
+}
+
+// функция очистки — вызывается ТОЛЬКО после подтверждения
+async function performClearSettingsAndUi() {
+  try {
+    // Очистка путей/словарей
+    mainFolder = '';
+    insertFolder = '';
+    outputFolder = '';
+    zepbDict = {};
+    insertDict = {};
+
+    // Обновляем метки папок в UI
+    try { updateFolderLabel(labelMain, null); } catch {}
+    try { updateFolderLabel(labelInsert, null); } catch {}
+    try { updateFolderLabel(labelOutput, null); } catch {}
+
+    // Сброс настроек сжатия / миниатюр к дефолту
+    if (settingCompressQuality) settingCompressQuality.value = '30';
+    if (settingThumbsEnabled) settingThumbsEnabled.checked = true;
+    if (settingThumbSize) settingThumbSize.value = '128';
+
+    // Очистка блока compress (если есть)
+    try { if (labelCompress) labelCompress.value = 'Не выбрана'; } catch {}
+    try { compressOutputFolder = null; } catch {}
+    try { if (labelCompressOutput) updateFolderLabel(labelCompressOutput, null); } catch {}
+
+    // Очистка unmatched
+    try { unmatchedItems = []; renderUnmatched(); if (unmatchedBlock) unmatchedBlock.style.display = 'none'; } catch {}
+
+    // Сохранение настроек
+    try { await saveSettings(); } catch (e) { console.warn('saveSettings error', e); }
+
+    // Обновление UI состояния
+    try { updateStats(); } catch {}
+    try { checkReady(); } catch {}
+    try { updateCompressReady(); } catch {}
+
+    // Popup уведомление
+    try { if (typeof showPopup === 'function') showPopup('Настройки очищены', 4000); else alert('Настройки очищены'); } catch {}
+
+    try { log('Настройки очищены', 'warning'); } catch {}
+  } catch (err) {
+    console.error('Ошибка при очистке настроек:', err);
+    try { log(`Ошибка при очистке настроек: ${(err as Error).message}`, 'error'); } catch {}
+  }
+}
+
+// Кнопка "Очистить" — только открывает модалку (НЕ очищает ничего сразу)
+if (btnClearSettings) {
+  // удаляем старые обработчики, если они есть (предотвращение двойного срабатывания)
+  btnClearSettings.replaceWith(btnClearSettings.cloneNode(true));
+}
+const btnClearSettingsLive = document.getElementById('btn-clear-settings') as HTMLButtonElement | null;
+if (btnClearSettingsLive) {
+  btnClearSettingsLive.addEventListener('click', (e) => {
+    e.preventDefault();
+    openConfirmClearModal();
+  });
+}
+
+// Обработчики модалки
+confirmClearNo?.addEventListener('click', () => {
+  // по отмене ничего не меняем — просто закрываем модалку
+  closeConfirmClearModal();
+});
+
+// клик по бэкдропу закрывает модалку
+confirmClearBackdrop?.addEventListener('click', () => {
+  closeConfirmClearModal();
+});
+
+// Подтверждение очистки
+confirmClearYes?.addEventListener('click', async () => {
+  closeConfirmClearModal();
+  await performClearSettingsAndUi();
+});
+
+// ESC на клавиатуре закрывает модалку
+document.addEventListener('keydown', (ev) => {
+  if (!confirmClearModal || confirmClearModal.classList.contains('hidden')) return;
+  if (ev.key === 'Escape') {
+    closeConfirmClearModal();
+  }
+});
+
+interface UnmatchedItem {
+  type: 'notif' | 'zepb';
+  code: string;
+  file: string;
+  reason: string;
+}
+
+let unmatchedItems: UnmatchedItem[] = [];
+
+function renderUnmatched() {
+  if (!unmatchedTableBody || !unmatchedBlock) return;
+  unmatchedTableBody.innerHTML = '';
+  const typeFilter = unmatchedFilter?.value || 'all';
+  const term = (unmatchedSearch?.value || '').trim().toLowerCase();
+
+  const filtered = unmatchedItems.filter(it => {
+    if (typeFilter !== 'all' && it.type !== typeFilter) return false;
+    if (term) {
+      const hay = `${it.code} ${it.file}`.toLowerCase();
+      return hay.includes(term);
+    }
+    return true;
+  });
+
+  for (const it of filtered) {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid rgba(0,0,0,0.04)';
+
+    const tdType = document.createElement('td');
+    tdType.textContent = it.type === 'notif' ? 'Увед.' : 'ЗЭПБ';
+    tdType.style.padding = '8px 10px';
+    tdType.style.width = '80px';
+    tdType.style.fontWeight = '600';
+
+    const tdCode = document.createElement('td');
+    tdCode.textContent = it.code;
+    tdCode.style.padding = '8px 10px';
+    tdCode.style.width = '140px';
+
+    const tdFile = document.createElement('td');
+    tdFile.textContent = it.file;
+    tdFile.style.padding = '8px 10px';
+    tdFile.style.wordBreak = 'break-all';
+
+    const tdReason = document.createElement('td');
+    tdReason.textContent = it.reason;
+    tdReason.style.padding = '8px 10px';
+    tdReason.style.width = '160px';
+
+    tr.appendChild(tdType);
+    tr.appendChild(tdCode);
+    tr.appendChild(tdFile);
+    tr.appendChild(tdReason);
+    unmatchedTableBody.appendChild(tr);
+  }
+
+  const total = unmatchedItems.length;
+  if (unmatchedCountBadge) {
+    unmatchedCountBadge.textContent = String(total);
+    unmatchedCountBadge.style.display = total ? 'inline-block' : 'none';
+  }
+  if (unmatchedEmpty) unmatchedEmpty.style.display = (total === 0) ? 'block' : 'none';
+  if (unmatchedExportBtn) unmatchedExportBtn.disabled = total === 0;
+  if (unmatchedClearBtn) unmatchedClearBtn.disabled = total === 0;
+  unmatchedBlock.style.display = total === 0 ? 'none' : 'block';
+}
+
+unmatchedSearch?.addEventListener('input', renderUnmatched);
+unmatchedFilter?.addEventListener('change', renderUnmatched);
+unmatchedClearBtn?.addEventListener('click', () => {
+  unmatchedItems = [];
+  renderUnmatched();
+});
+
+unmatchedExportBtn?.addEventListener('click', () => {
+  if (!unmatchedItems.length) return;
+  const lines = unmatchedItems.map(it => `${it.type};${it.code};${it.file};${it.reason}`);
+  const content = ['type;code;file;reason', ...lines].join('\n');
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `unmatched_${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+});
+if (unmatchedClearBtn) {
+  unmatchedClearBtn.addEventListener('click', () => {
+    try {
+      unmatchedItems = [];
+      renderUnmatched();
+      // Скрываем блок после очистки
+      if (unmatchedBlock) unmatchedBlock.style.display = 'none';
+    } catch (e) {
+      console.error('Ошибка при очистке unmatched:', e);
+    }
+  });
+}
+
+// Подписка: предварительное событие с незашитыми (merge-unmatched) — отображаем быстро
+if (window.electronAPI && (window.electronAPI as any).onMergeUnmatched) {
+  (window.electronAPI as any).onMergeUnmatched((_e: any, payload: any) => {
+    try {
+      const { unmatchedNotifications = [], unmatchedZepb = [] } = payload || {};
+      unmatchedItems = [];
+      for (const n of unmatchedNotifications) unmatchedItems.push({ type: 'notif', code: n.code, file: n.file, reason: 'Нет ЗЭПБ' });
+      for (const z of unmatchedZepb) unmatchedItems.push({ type: 'zepb', code: z.code, file: z.file, reason: 'Нет уведомления' });
+      renderUnmatched();
+    } catch (err) {
+      console.error('onMergeUnmatched handler error', err);
+    }
+  });
+}
+
+// Подписка: окончательное событие merge-complete (гарантирует итог)
+if (window.electronAPI && (window.electronAPI as any).onMergeComplete) {
+  (window.electronAPI as any).onMergeComplete((_e: any, payload: any) => {
+    try {
+      const { unmatchedNotifications = [], unmatchedZepb = [] } = payload || {};
+      // Объединяем уникально (если уже были предварительные)
+      const map = new Map<string, UnmatchedItem>();
+      for (const it of unmatchedItems) map.set(`${it.type}:${it.code}:${it.file}`, it);
+      for (const n of unmatchedNotifications) map.set(`notif:${n.code}:${n.file}`, { type: 'notif', code: n.code, file: n.file, reason: 'Нет ЗЭПБ' });
+      for (const z of unmatchedZepb) map.set(`zepb:${z.code}:${z.file}`, { type: 'zepb', code: z.code, file: z.file, reason: 'Нет уведомления' });
+      unmatchedItems = Array.from(map.values());
+      renderUnmatched();
+    } catch (err) {
+      console.error('onMergeComplete handler error', err);
+    }
+  });
 }
 
 // === Drag&Drop миниатюры для compress-drop-hint (Единая версия) ===
@@ -1230,13 +1479,55 @@ if (btnOpenOutput) btnOpenOutput.addEventListener('click', async () => {
   if (!ok) alert(`Не удалось открыть папку:\n${outputFolder}`);
 });
 
-if (btnClearSettings) btnClearSettings.addEventListener('click', async () => {
-  if (!confirm('Очистить настройки?')) return;
-  mainFolder = ''; insertFolder = ''; outputFolder = ''; zepbDict = {}; insertDict = {};
-  updateFolderLabel(labelMain, null); updateFolderLabel(labelInsert, null); updateFolderLabel(labelOutput, null);
-  updateStats(); checkReady(); await saveSettings();
-  log('Настройки очищены', 'warning');
-});
+if (btnClearSettings) {
+  btnClearSettings.addEventListener('click', async () => {
+    try {
+      // 1) Очистка основных путей и словарей
+      mainFolder = '';
+      insertFolder = '';
+      outputFolder = '';
+      zepbDict = {};
+      insertDict = {};
+
+      // Обновляем подписи/лейблы папок в UI
+      updateFolderLabel(labelMain, null);
+      updateFolderLabel(labelInsert, null);
+      updateFolderLabel(labelOutput, null);
+
+      // 2) Очистка настроек сжатия/миниатюр в UI (возвращаем к значениям по умолчанию)
+      if (settingCompressQuality) settingCompressQuality.value = '30';
+      if (settingThumbsEnabled) settingThumbsEnabled.checked = true;
+      if (settingThumbSize) settingThumbSize.value = '128';
+
+      // Очистка полей compress (вход/выход)
+      if (labelCompress) labelCompress.value = 'Не выбрана';
+      compressOutputFolder = null;
+      if (labelCompressOutput) updateFolderLabel(labelCompressOutput, null);
+
+      // 3) Обновление состояний интерфейса
+      updateStats();
+      checkReady();
+      updateCompressReady();
+
+      // 4) Очистить блок несшитых и скрыть его
+      try {
+        unmatchedItems = [];
+        renderUnmatched();
+        if (unmatchedBlock) unmatchedBlock.style.display = 'none';
+      } catch (e) {
+        // Если блока ещё нет — игнорируем
+      }
+
+      // 5) Сохранить настройки (сейчас пустые/дефолтные)
+      await saveSettings();
+
+      log('Настройки очищены', 'warning');
+    } catch (err) {
+      console.error('Ошибка при очистке настроек:', err);
+      log(`Ошибка при очистке настроек: ${(err as Error).message}`, 'error');
+    }
+  });
+}
 
 /* Всплывающий popup */
 function showPopup(message: string, timeout = 8000) {

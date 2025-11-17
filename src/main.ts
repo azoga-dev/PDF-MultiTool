@@ -600,12 +600,15 @@ ipcMain.handle('merge-pdfs', async (_event, { mainFolder, insertFolder, outputFo
 
     mergeCancelRequested = false;
 
+    // 1) Быстрое построение словарей (code -> filepath)
+    // insert = уведомления, zepb = ЗЭПБ
     const insertDict = await buildDict(
       insertFolder,
       !!recursiveInsert,
       (full) => full.toLowerCase().endsWith('.pdf'),
       extractNotificationCode
     );
+
     const zepbDict = await buildDict(
       mainFolder,
       !!recursiveMain,
@@ -613,11 +616,30 @@ ipcMain.handle('merge-pdfs', async (_event, { mainFolder, insertFolder, outputFo
       extractZepbCode
     );
 
-    const keys = Object.keys(insertDict);
-    summary.total = keys.length;
+    const insertCodes = Object.keys(insertDict);
+    const zepbCodes = Object.keys(zepbDict);
+
+    summary.total = insertCodes.length;
+
+    // 2) Эффективное вычисление несшитых до тяжёлой работы
+    const zepbSet = new Set(zepbCodes);
+    const insertSet = new Set(insertCodes);
+
+    const unmatchedNotifications = insertCodes
+      .filter(code => !zepbSet.has(code))
+      .map(code => ({ code, file: path.basename(insertDict[code]) }));
+
+    const unmatchedZepb = zepbCodes
+      .filter(code => !insertSet.has(code))
+      .map(code => ({ code, file: path.basename(zepbDict[code]) }));
+
+    // Отправляем предварительный список несшитых (renderer может показать сразу)
+    mainWindow?.webContents.send('merge-unmatched', { unmatchedNotifications, unmatchedZepb });
+
+    // 3) Теперь основной цикл слияний (как раньше) — обрабатываем уведомления
     const processedNames: string[] = [];
 
-    for (let i = 0; i < keys.length; i++) {
+    for (let i = 0; i < insertCodes.length; i++) {
       if (mergeCancelRequested) {
         const cancelMsg = 'Операция объединения отменена пользователем';
         summary.log.push(cancelMsg);
@@ -634,7 +656,7 @@ ipcMain.handle('merge-pdfs', async (_event, { mainFolder, insertFolder, outputFo
         break;
       }
 
-      const code = keys[i];
+      const code = insertCodes[i];
       const notifPath = insertDict[code];
       const zepbPath = zepbDict[code];
       const index = i + 1;
@@ -643,7 +665,14 @@ ipcMain.handle('merge-pdfs', async (_event, { mainFolder, insertFolder, outputFo
         const msg = `Не найден ЗЭПБ для уведомления: ${path.basename(notifPath)} (${code})`;
         summary.log.push(msg);
         summary.skipped++;
-        mainWindow?.webContents.send('merge-progress', { processed: summary.processed, skipped: summary.skipped, total: summary.total, current: index, code, message: msg });
+        mainWindow?.webContents.send('merge-progress', {
+          processed: summary.processed,
+          skipped: summary.skipped,
+          total: summary.total,
+          current: index,
+          code,
+          message: msg
+        });
         logStore.push(msg);
         if (logWindow) logWindow.webContents.send('log-append', msg);
         continue;
@@ -653,7 +682,14 @@ ipcMain.handle('merge-pdfs', async (_event, { mainFolder, insertFolder, outputFo
         const msg = `Пропущен уже обработанный ЗЭПБ: ${path.basename(zepbPath)}`;
         summary.log.push(msg);
         summary.skipped++;
-        mainWindow?.webContents.send('merge-progress', { processed: summary.processed, skipped: summary.skipped, total: summary.total, current: index, code, message: msg });
+        mainWindow?.webContents.send('merge-progress', {
+          processed: summary.processed,
+          skipped: summary.skipped,
+          total: summary.total,
+          current: index,
+          code,
+          message: msg
+        });
         logStore.push(msg);
         if (logWindow) logWindow.webContents.send('log-append', msg);
         continue;
@@ -673,30 +709,28 @@ ipcMain.handle('merge-pdfs', async (_event, { mainFolder, insertFolder, outputFo
           .replace(/\s*\(с увед.*?\)\s*$/i, '')
           .replace(/\s*с увед.*?$/i, '');
         const outName = `${base} (с увед).pdf`;
-        const outPath = path.join(outputFolder, outName);
-        const mergedBuf = await merged.save();
-        await fsp.writeFile(outPath, mergedBuf);
+        const outFull = path.join(outputFolder, outName);
+        await fsp.writeFile(outFull, await merged.save());
 
         summary.processed++;
         processedNames.push(outName);
 
-        const msg = `Объединено: ${outName}`;
+        const msg = `Сшито: ${outName}`;
         summary.log.push(msg);
         mainWindow?.webContents.send('merge-progress', {
-            processed: summary.processed,
-            skipped: summary.skipped,
-            total: summary.total,
-            current: index,
-            code,
-            outputFilename: outName,
-            message: msg
+          processed: summary.processed,
+          skipped: summary.skipped,
+          total: summary.total,
+          current: index,
+          code,
+          message: msg
         });
         logStore.push(msg);
         if (logWindow) logWindow.webContents.send('log-append', msg);
       } catch (err) {
-        const em = `Ошибка при обработке ${code}: ${(err as Error).message}`;
-        summary.errors.push(em);
-        summary.log.push(em);
+        const msg = `Ошибка при объединении кода ${code}: ${(err as Error).message}`;
+        summary.log.push(msg);
+        summary.errors.push(msg);
         summary.skipped++;
         mainWindow?.webContents.send('merge-progress', {
           processed: summary.processed,
@@ -704,62 +738,39 @@ ipcMain.handle('merge-pdfs', async (_event, { mainFolder, insertFolder, outputFo
           total: summary.total,
           current: index,
           code,
-          message: em
+          message: msg
         });
-        logStore.push(em);
-        if (logWindow) logWindow.webContents.send('log-append', em);
+        logStore.push(msg);
+        if (logWindow) logWindow.webContents.send('log-append', msg);
       }
     }
 
-    // Формируем реестр (даже если было отменено — для обработанных файлов)
-    let registryPath: string | null = null;
-    try {
-      registryPath = await createRegisterDocx(outputFolder, processedNames);
-      if (registryPath) {
-        summary.log.push(`Создан реестр: ${registryPath}`);
-        logStore.push(`Создан реестр: ${registryPath}`);
-        if (logWindow) logWindow.webContents.send('log-append', `Создан реестр: ${registryPath}`);
-      }
-    } catch (e) {
-      const em = `Ошибка формирования реестра: ${(e as Error).message}`;
-      summary.log.push(em);
-      logStore.push(em);
-      if (logWindow) logWindow.webContents.send('log-append', em);
-    }
+    // 4) После основного прохода: сформируем реестр (если нужно) и отправим итог
+    const registryPath = processedNames.length
+      ? await createRegisterDocx(outputFolder, processedNames) // <- ПРАВИЛЬНЫЙ порядок аргументов
+      : null;
 
-    const finishedPayload = {
-      processed: summary.processed,
-      skipped: summary.skipped,
-      total: summary.total,
-      errors: summary.errors,
-      log: summary.log,
+    mainWindow?.webContents.send('merge-complete', {
+      summary,
       registry: registryPath,
-      canceled: summary.canceled
+      unmatchedNotifications,
+      unmatchedZepb
+    });
+
+    return {
+      ...summary,
+      registry: registryPath,
+      unmatchedNotifications,
+      unmatchedZepb
     };
-
-    mainWindow?.webContents.send('merge-complete', finishedPayload);
-    if (logWindow) logWindow.webContents.send('merge-complete', finishedPayload);
-
-    return summary;
   } catch (err) {
-    const em = `Ошибка объединения: ${(err as Error).message}`;
-    summary.errors.push(em);
-    summary.log.push(em);
-    logStore.push(em);
-
-    const failedPayload = {
-      processed: summary.processed,
-      skipped: summary.skipped,
-      total: summary.total,
-      errors: summary.errors,
-      log: summary.log,
-      registry: null,
-      canceled: summary.canceled
-    };
-
-    mainWindow?.webContents.send('merge-complete', failedPayload);
-    if (logWindow) logWindow.webContents.send('merge-complete', failedPayload);
-    return summary;
+    const em = (err as Error).message || String(err);
+    const msg = `Ошибка объединения: ${em}`;
+    console.error(msg);
+    summary.errors.push(msg);
+    summary.log.push(msg);
+    if (mainWindow) mainWindow.webContents.send('merge-complete', { summary, registry: null, unmatchedNotifications: [], unmatchedZepb: [] });
+    return { ...summary, registry: null, unmatchedNotifications: [], unmatchedZepb: [] };
   }
 });
 

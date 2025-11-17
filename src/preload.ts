@@ -80,5 +80,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Прогресс и завершение объединения
   onMergeProgress: (cb: (event: any, payload: any) => void) => { ipcRenderer.on('merge-progress', (_e, payload) => cb(null, payload)); return () => ipcRenderer.removeAllListeners('merge-progress'); },
-  onMergeComplete: (cb: (event: any, payload: any) => void) => { ipcRenderer.on('merge-complete', (_e, payload) => cb(null, payload)); return () => ipcRenderer.removeAllListeners('merge-complete'); }
+
+  onMergeUnmatched: (cb: (event: any, payload: any) => void) => {
+    ipcRenderer.on('merge-unmatched', cb);
+    return () => ipcRenderer.removeListener('merge-unmatched', cb);
+  },
+  onMergeComplete: (cb: (event: any, payload: any) => void) => {
+    ipcRenderer.on('merge-complete', cb);
+    return () => ipcRenderer.removeListener('merge-complete', cb);
+  },
 });

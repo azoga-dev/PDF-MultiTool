@@ -1010,6 +1010,43 @@
                 </div>
             </div>
 
+            <div id="unmatched-block" class="folder-group" style="display:none; margin-top:12px;">
+                <label class="folder-label" style="display:flex; align-items:center; gap:8px;">
+                    Несшитые файлы
+                    <span id="unmatched-count-badge"
+                        style="background:var(--sidebar-border); color:var(--text-color); padding:2px 8px; border-radius:12px; font-size:12px; display:none;"></span>
+                </label>
+
+                <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:10px 0;">
+                    <input type="text" id="unmatched-search" placeholder="Поиск по коду / имени..." class="folder-input" style="flex:1; min-width:220px;">
+                    <select id="unmatched-filter-type" class="folder-input" style="width:180px;">
+                    <option value="all" selected>Все типы</option>
+                    <option value="notif">Уведомления без ЗЭПБ</option>
+                    <option value="zepb">ЗЭПБ без уведомления</option>
+                    </select>
+                    <button id="unmatched-export" class="btn btn-outline" disabled title="Экспорт списка в TXT">Экспорт</button>
+                    <button id="unmatched-clear" class="btn btn-outline" disabled title="Скрыть">Скрыть</button>
+                </div>
+
+                <div id="unmatched-table-wrap" style="border:1px solid var(--sidebar-border); border-radius:8px; overflow:auto; max-height:260px; background:var(--main-bg);">
+                    <table id="unmatched-table" style="width:100%; border-collapse:collapse; font-size:13px;">
+                    <thead>
+                        <tr style="background:transparent;">
+                        <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--sidebar-border); width:80px;">Тип</th>
+                        <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--sidebar-border); width:140px;">Код</th>
+                        <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--sidebar-border);">Имя файла</th>
+                        <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--sidebar-border); width:160px;">Причина</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                    </table>
+                </div>
+
+                <div id="unmatched-empty" style="display:none; font-size:12px; color:var(--text-color); opacity:0.7; padding:8px 4px;">
+                    Все файлы были сопоставлены — список пуст.
+                </div>
+            </div>
+
             <div class="controls-row">
                 <button id="btn-run" class="btn btn-secondary" disabled>
                     Начать объединение
@@ -1206,6 +1243,7 @@
         </div>
     </div>
     </div>
+
     <!-- Всплывающее уведомление об обновлении (по умолчанию скрыто) -->
     <div id="update-notification" class="update-notification hidden">
   <div class="update-notification-content">
@@ -1214,6 +1252,26 @@
       <!-- ДОБАВЛЕНО: кнопка "Обновить" -->
       <button id="btn-update-popup" class="btn btn-primary btn-sm">Обновить</button>
       <button id="btn-dismiss-popup" class="btn btn-outline btn-sm">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirm-clear-modal" class="confirm-clear-modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-clear-title" aria-hidden="true">
+  <div class="confirm-clear-backdrop" id="confirm-clear-backdrop"></div>
+  <div class="confirm-clear-panel" role="document" tabindex="-1">
+    <div class="confirm-clear-header">
+      <strong id="confirm-clear-title">Подтвердите очистку настроек</strong>
+    </div>
+
+    <div class="confirm-clear-body" id="confirm-clear-body">
+      <p style="margin:0;">
+        Вы уверены, что хотите сбросить все настройки приложения? Это действие удалит выбранные папки, параметры сжатия и очистит список несшитых файлов в интерфейсе.
+      </p>
+    </div>
+
+    <div class="confirm-clear-actions" style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+      <button id="confirm-clear-no" class="btn btn-outline">Отмена</button>
+      <button id="confirm-clear-yes" class="btn btn-primary">Очистить</button>
     </div>
   </div>
 </div>
